@@ -3,113 +3,116 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 
 export default function AdminPanel() {
-  // 1. ALL STATE HOOKS (Must be at the top)
   const [products, setProducts] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
-  const [name, setName] = useState("");
-  const [price, setPrice] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
-  const [tag, setTag] = useState("");
+  const [isUpdating, setIsUpdating] = useState(false);
 
-  // 2. DATA FETCHING LOGIC
   const fetchData = async () => {
-    // Fetch Products
     const { data: prodData } = await supabase.from("products").select("*");
     if (prodData) setProducts(prodData);
 
-    // Fetch Orders
     const { data: ordData } = await supabase.from("orders").select("*").order('created_at', { ascending: false });
     if (ordData) setOrders(ordData);
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
-  // 3. ACTIONS
-  const addProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await supabase.from("products").insert([{ 
-      name, 
-      price: Number(price), 
-      image_url: imageUrl, 
-      "oldPrice": (Number(price) * 1.2).toFixed(0),
-      tag 
-    }]);
-    setName(""); setPrice(""); setImageUrl(""); setTag("");
-    fetchData();
+  // --- REVENUE LOGIC ---
+  const totalRevenue = orders.reduce((acc, curr) => acc + Number(curr.total_price), 0);
+  const shippedRevenue = orders
+    .filter(o => o.status === 'Shipped')
+    .reduce((acc, curr) => acc + Number(curr.total_price), 0);
+
+  // --- DOWNLOAD CSV LOGIC ---
+  const downloadCSV = () => {
+    const headers = ["Order ID", "Customer Name", "Phone", "Address", "Method", "Total Price", "Status", "Date"];
+    const rows = orders.map(o => [
+      o.id,
+      o.customer_name,
+      o.customer_phone,
+      `"${o.customer_address.replace(/"/g, '""')}"`, // Handle commas in addresses
+      o.payment_method,
+      o.total_price,
+      o.status || 'Pending',
+      new Date(o.created_at).toLocaleDateString()
+    ]);
+
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    
+    link.setAttribute("href", url);
+    link.setAttribute("download", `YasarWay_Orders_${new Date().toLocaleDateString()}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
-  const deleteProduct = async (id: number) => {
-    await supabase.from("products").delete().eq("id", id);
-    fetchData();
+  const updateStatus = async (id: number, newStatus: string) => {
+    setIsUpdating(true);
+    await supabase.from("orders").update({ status: newStatus }).eq("id", id);
+    await fetchData();
+    setIsUpdating(false);
   };
 
   return (
     <div className="min-h-screen bg-black text-white p-6 md:p-12 font-sans">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-5xl font-black italic uppercase tracking-tighter mb-10 text-center">Admin Console</h1>
+        <div className="flex flex-col md:flex-row justify-between items-center mb-12 gap-6">
+            <h1 className="text-5xl font-black italic uppercase tracking-tighter">THE YASAR WAY <span className="text-zinc-700">HQ</span></h1>
+            <button 
+                onClick={downloadCSV}
+                className="bg-zinc-800 hover:bg-white hover:text-black transition-all text-[10px] font-bold uppercase tracking-[0.2em] px-6 py-3 border border-zinc-700"
+            >
+                Export Orders (CSV)
+            </button>
+        </div>
         
-        {/* ADD PRODUCT FORM */}
-        <form onSubmit={addProduct} className="mb-16 bg-zinc-900/50 p-8 border border-zinc-800 backdrop-blur-sm">
-          <h2 className="text-xl font-bold uppercase mb-6 tracking-widest">Add to Inventory</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Product Name" className="bg-black border border-zinc-700 p-3 text-sm focus:border-white outline-none transition-all" required />
-            <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Price (PKR)" type="number" className="bg-black border border-zinc-700 p-3 text-sm focus:border-white outline-none transition-all" required />
-            <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="Image URL (from Supabase Storage)" className="bg-black border border-zinc-700 p-3 text-sm focus:border-white outline-none transition-all md:col-span-2" />
-            <input value={tag} onChange={(e) => setTag(e.target.value)} placeholder="Tag (NEW, BEST SELLER)" className="bg-black border border-zinc-700 p-3 text-sm focus:border-white outline-none transition-all md:col-span-2" />
-            <button type="submit" className="md:col-span-2 bg-white text-black font-bold py-4 hover:invert transition-all uppercase text-xs tracking-widest">Update Storefront</button>
+        {/* REVENUE CARDS */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-12">
+          <div className="bg-zinc-900 border border-zinc-800 p-8">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Total Sales Volume</p>
+            <p className="text-4xl font-black italic">Rs. {totalRevenue.toLocaleString()}</p>
           </div>
-        </form>
-
-        {/* LIVE INVENTORY */}
-        <div className="space-y-4 mb-20">
-          <h2 className="text-xl font-bold uppercase mb-6 tracking-widest">Current Inventory</h2>
-          {products.map((p) => (
-            <div key={p.id} className="flex justify-between items-center bg-zinc-900/30 p-4 border border-zinc-800">
-              <div className="flex items-center gap-4">
-                {p.image_url && <img src={p.image_url} className="w-12 h-16 object-cover border border-zinc-700" alt="" />}
-                <div>
-                  <p className="font-bold uppercase tracking-tighter italic">{p.name}</p>
-                  <p className="text-zinc-500 text-[10px]">Rs. {p.price}</p>
-                </div>
-              </div>
-              <button onClick={() => deleteProduct(p.id)} className="text-red-500 text-[10px] font-bold uppercase tracking-widest hover:underline">Remove</button>
-            </div>
-          ))}
+          <div className="bg-zinc-900 border border-zinc-800 p-8">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Confirmed (Shipped)</p>
+            <p className="text-4xl font-black italic text-green-500 text-opacity-80">Rs. {shippedRevenue.toLocaleString()}</p>
+          </div>
         </div>
 
-        {/* RECENT ORDERS */}
-        <div className="mt-20">
-          <h2 className="text-xl font-bold uppercase mb-6 tracking-widest">Recent Orders</h2>
-          {orders.length === 0 ? (
-            <p className="text-zinc-600 uppercase text-xs tracking-widest">No orders yet.</p>
-          ) : (
-            orders.map((order) => (
-              <div key={order.id} className="bg-zinc-900/50 p-6 border border-zinc-800 mb-4 rounded-sm">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <p className="font-bold uppercase text-lg italic tracking-tighter">{order.customer_name}</p>
-                    <p className="text-zinc-500 text-[10px] uppercase tracking-widest">{order.payment_method || 'COD'}</p>
+        {/* ORDERS LIST */}
+        <div className="space-y-6">
+          <h2 className="text-xl font-bold uppercase italic tracking-widest border-b border-zinc-800 pb-2">Active Orders</h2>
+          {orders.map((order) => (
+            <div key={order.id} className={`p-6 border transition-all ${order.status === 'Shipped' ? 'bg-zinc-900/20 border-zinc-900 opacity-40' : 'bg-zinc-900/50 border-zinc-800'}`}>
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="flex items-center gap-3 mb-1">
+                    <p className="font-bold uppercase text-lg italic">{order.customer_name}</p>
+                    <span className={`text-[8px] px-2 py-0.5 font-bold uppercase rounded ${order.status === 'Shipped' ? 'bg-zinc-800 text-zinc-500' : 'bg-white text-black'}`}>
+                      {order.status || 'Pending'}
+                    </span>
                   </div>
-                  <p className="text-white font-black text-xl italic">Rs. {order.total_price}</p>
+                  <p className="text-zinc-500 text-[10px] uppercase tracking-widest">{order.payment_method} • {order.customer_phone}</p>
                 </div>
-                <p className="text-zinc-400 text-xs mb-4 p-3 bg-black/40 rounded border border-zinc-800">{order.customer_address}</p>
-                <div className="border-t border-zinc-800 pt-4">
-                  <p className="text-[10px] font-bold text-zinc-500 uppercase mb-2">Items Ordered:</p>
-                  {order.items && Array.isArray(order.items) ? (
-                    order.items.map((item: any, idx: number) => (
-                      <p key={idx} className="text-xs text-zinc-300 uppercase italic mb-1">
-                        {item.name} <span className="text-zinc-600 font-normal">x {item.quantity || 1}</span>
-                      </p>
-                    ))
-                  ) : (
-                    <p className="text-xs text-zinc-500 italic">No item data available</p>
+                <div className="text-right">
+                  <p className="text-white font-black text-xl italic leading-none">Rs. {order.total_price}</p>
+                  {order.status !== 'Shipped' && (
+                    <button 
+                      disabled={isUpdating}
+                      onClick={() => updateStatus(order.id, 'Shipped')}
+                      className="mt-3 text-[9px] bg-white text-black px-4 py-1.5 font-bold uppercase hover:invert"
+                    >
+                      Mark Shipped
+                    </button>
                   )}
                 </div>
               </div>
-            ))
-          )}
+              <p className="text-zinc-500 text-[11px] mt-4 uppercase italic tracking-tighter">{order.customer_address}</p>
+            </div>
+          ))}
         </div>
       </div>
     </div>
