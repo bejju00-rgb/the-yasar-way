@@ -3,9 +3,19 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 
 export default function AdminPanel() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [password, setPassword] = useState("");
+  
+  // App State
   const [products, setProducts] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [isUpdating, setIsUpdating] = useState(false);
+
+  // Form State
+  const [name, setName] = useState("");
+  const [price, setPrice] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [tag, setTag] = useState("");
 
   const fetchData = async () => {
     const { data: prodData } = await supabase.from("products").select("*");
@@ -15,41 +25,41 @@ export default function AdminPanel() {
     if (ordData) setOrders(ordData);
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    if (isAuthenticated) fetchData();
+  }, [isAuthenticated]);
+
+  // --- AUTH LOGIC ---
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password === "YASAR786") { // SET YOUR PASSWORD HERE
+      setIsAuthenticated(true);
+    } else {
+      alert("Access Denied.");
+    }
+  };
 
   // --- REVENUE LOGIC ---
   const totalRevenue = orders.reduce((acc, curr) => acc + Number(curr.total_price), 0);
-  const shippedRevenue = orders
-    .filter(o => o.status === 'Shipped')
-    .reduce((acc, curr) => acc + Number(curr.total_price), 0);
 
-  // --- DOWNLOAD CSV LOGIC ---
-  const downloadCSV = () => {
-    const headers = ["Order ID", "Customer Name", "Phone", "Address", "Method", "Total Price", "Status", "Date"];
-    const rows = orders.map(o => [
-      o.id,
-      o.customer_name,
-      o.customer_phone,
-      `"${o.customer_address.replace(/"/g, '""')}"`, // Handle commas in addresses
-      o.payment_method,
-      o.total_price,
-      o.status || 'Pending',
-      new Date(o.created_at).toLocaleDateString()
-    ]);
-
-    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    
-    link.setAttribute("href", url);
-    link.setAttribute("download", `YasarWay_Orders_${new Date().toLocaleDateString()}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  // --- PRODUCT LOGIC ---
+  const addProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await supabase.from("products").insert([{ 
+      name, price: Number(price), image_url: imageUrl, "oldPrice": (Number(price) * 1.2).toFixed(0), tag 
+    }]);
+    setName(""); setPrice(""); setImageUrl(""); setTag("");
+    fetchData();
   };
 
+  const deleteProduct = async (id: number) => {
+    if(confirm("Delete this product?")) {
+      await supabase.from("products").delete().eq("id", id);
+      fetchData();
+    }
+  };
+
+  // --- ORDER LOGIC ---
   const updateStatus = async (id: number, newStatus: string) => {
     setIsUpdating(true);
     await supabase.from("orders").update({ status: newStatus }).eq("id", id);
@@ -57,62 +67,113 @@ export default function AdminPanel() {
     setIsUpdating(false);
   };
 
+  const downloadCSV = () => {
+    const headers = ["ID", "Customer", "Phone", "Address", "Method", "Total", "Status"];
+    const rows = orders.map(o => [o.id, o.customer_name, o.customer_phone, `"${o.customer_address}"`, o.payment_method, o.total_price, o.status || 'Pending']);
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "YasarWay_Orders.csv";
+    link.click();
+  };
+
+  // --- LOGIN UI ---
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center p-6">
+        <form onSubmit={handleLogin} className="w-full max-w-sm bg-zinc-900 p-8 border border-zinc-800">
+          <h1 className="text-2xl font-black italic uppercase text-white mb-6">HQ ACCESS</h1>
+          <input 
+            type="password" 
+            placeholder="Enter Master Password" 
+            className="w-full bg-black border border-zinc-700 p-4 text-white outline-none mb-4 focus:border-white"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <button className="w-full bg-white text-black font-bold py-4 uppercase tracking-widest text-xs">Authorize</button>
+        </form>
+      </div>
+    );
+  }
+
+  // --- MAIN ADMIN UI ---
   return (
     <div className="min-h-screen bg-black text-white p-6 md:p-12 font-sans">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-12 gap-6">
-            <h1 className="text-5xl font-black italic uppercase tracking-tighter">THE YASAR WAY <span className="text-zinc-700">HQ</span></h1>
-            <button 
-                onClick={downloadCSV}
-                className="bg-zinc-800 hover:bg-white hover:text-black transition-all text-[10px] font-bold uppercase tracking-[0.2em] px-6 py-3 border border-zinc-700"
-            >
-                Export Orders (CSV)
-            </button>
-        </div>
-        
-        {/* REVENUE CARDS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-12">
-          <div className="bg-zinc-900 border border-zinc-800 p-8">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Total Sales Volume</p>
-            <p className="text-4xl font-black italic">Rs. {totalRevenue.toLocaleString()}</p>
+      <div className="max-w-6xl mx-auto">
+        <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-4">
+          <div>
+            <p className="text-zinc-500 text-[10px] uppercase tracking-[0.4em] mb-2">Internal Management</p>
+            <h1 className="text-5xl font-black italic uppercase tracking-tighter">THE YASAR WAY</h1>
           </div>
-          <div className="bg-zinc-900 border border-zinc-800 p-8">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Confirmed (Shipped)</p>
-            <p className="text-4xl font-black italic text-green-500 text-opacity-80">Rs. {shippedRevenue.toLocaleString()}</p>
-          </div>
+          <button onClick={downloadCSV} className="text-[10px] font-bold uppercase border border-zinc-700 px-6 py-3 hover:bg-white hover:text-black transition-all">Export Orders</button>
         </div>
 
-        {/* ORDERS LIST */}
-        <div className="space-y-6">
-          <h2 className="text-xl font-bold uppercase italic tracking-widest border-b border-zinc-800 pb-2">Active Orders</h2>
-          {orders.map((order) => (
-            <div key={order.id} className={`p-6 border transition-all ${order.status === 'Shipped' ? 'bg-zinc-900/20 border-zinc-900 opacity-40' : 'bg-zinc-900/50 border-zinc-800'}`}>
-              <div className="flex justify-between items-start">
-                <div>
-                  <div className="flex items-center gap-3 mb-1">
-                    <p className="font-bold uppercase text-lg italic">{order.customer_name}</p>
-                    <span className={`text-[8px] px-2 py-0.5 font-bold uppercase rounded ${order.status === 'Shipped' ? 'bg-zinc-800 text-zinc-500' : 'bg-white text-black'}`}>
-                      {order.status || 'Pending'}
-                    </span>
+        {/* STATS */}
+        <div className="bg-zinc-900 border border-zinc-800 p-10 mb-12">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Total Accumulated Revenue</p>
+          <p className="text-6xl font-black italic tracking-tighter">Rs. {totalRevenue.toLocaleString()}</p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+          {/* LEFT: INVENTORY MANAGEMENT */}
+          <div className="space-y-12">
+            <section>
+              <h2 className="text-xl font-bold uppercase italic border-b border-zinc-800 pb-2 mb-6">Add Product</h2>
+              <form onSubmit={addProduct} className="grid grid-cols-2 gap-3">
+                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className="bg-zinc-900 p-3 text-sm border border-zinc-800 outline-none focus:border-white" required />
+                <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Price" type="number" className="bg-zinc-900 p-3 text-sm border border-zinc-800 outline-none focus:border-white" required />
+                <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="Image URL" className="col-span-2 bg-zinc-900 p-3 text-sm border border-zinc-800 outline-none focus:border-white" />
+                <button className="col-span-2 bg-white text-black font-bold py-3 uppercase text-[10px] tracking-widest">Update Catalog</button>
+              </form>
+            </section>
+
+            <section>
+              <h2 className="text-xl font-bold uppercase italic border-b border-zinc-800 pb-2 mb-6">Live Inventory</h2>
+              <div className="space-y-3">
+                {products.map(p => (
+                  <div key={p.id} className="flex justify-between items-center bg-zinc-900/40 p-3 border border-zinc-800 group">
+                    <div className="flex items-center gap-4">
+                      <img src={p.image_url} className="w-10 h-10 object-cover" alt="" />
+                      <div>
+                        <p className="font-bold text-xs uppercase">{p.name}</p>
+                        <p className="text-zinc-500 text-[10px]">Rs. {p.price}</p>
+                      </div>
+                    </div>
+                    <button onClick={() => deleteProduct(p.id)} className="text-red-500 opacity-0 group-hover:opacity-100 text-[9px] font-bold uppercase tracking-widest transition-all">Delete</button>
                   </div>
-                  <p className="text-zinc-500 text-[10px] uppercase tracking-widest">{order.payment_method} • {order.customer_phone}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-white font-black text-xl italic leading-none">Rs. {order.total_price}</p>
+                ))}
+              </div>
+            </section>
+          </div>
+
+          {/* RIGHT: ORDER MANAGEMENT */}
+          <div>
+            <h2 className="text-xl font-bold uppercase italic border-b border-zinc-800 pb-2 mb-6">Order Stream</h2>
+            <div className="space-y-4">
+              {orders.map((order) => (
+                <div key={order.id} className={`p-6 border ${order.status === 'Shipped' ? 'bg-zinc-900/20 border-zinc-900 opacity-40' : 'bg-zinc-900 border-zinc-800'}`}>
+                  <div className="flex justify-between mb-4">
+                    <div>
+                      <p className="font-black italic uppercase leading-none">{order.customer_name}</p>
+                      <p className="text-[10px] text-zinc-500 mt-1 uppercase font-bold">{order.payment_method} • {order.customer_phone}</p>
+                    </div>
+                    <p className="font-black italic text-xl">Rs. {order.total_price}</p>
+                  </div>
+                  <p className="text-[10px] text-zinc-400 mb-4 uppercase">{order.customer_address}</p>
                   {order.status !== 'Shipped' && (
                     <button 
-                      disabled={isUpdating}
                       onClick={() => updateStatus(order.id, 'Shipped')}
-                      className="mt-3 text-[9px] bg-white text-black px-4 py-1.5 font-bold uppercase hover:invert"
+                      className="w-full bg-white text-black text-[9px] font-bold py-2 uppercase tracking-[0.2em]"
                     >
-                      Mark Shipped
+                      Mark as Shipped
                     </button>
                   )}
                 </div>
-              </div>
-              <p className="text-zinc-500 text-[11px] mt-4 uppercase italic tracking-tighter">{order.customer_address}</p>
+              ))}
             </div>
-          ))}
+          </div>
         </div>
       </div>
     </div>
