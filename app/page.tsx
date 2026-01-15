@@ -15,10 +15,22 @@ export default function Home() {
   const shopSectionRef = useRef<HTMLDivElement>(null);
 
   const slides = [
-    { title: "ELEVATE YOUR", subtitle: "EVERYDAY", color: "bg-[#fcfcfc]" },
-    { title: "THE MODERN", subtitle: "STANDARD", color: "bg-[#f4f4f4]" },
-    { title: "DEFINING", subtitle: "THE WAY", color: "bg-[#eeeeee]" },
-  ];
+  { 
+    title: "ELEVATE YOUR", 
+    subtitle: "EVERYDAY", 
+    image: "https://your-image-url-1.jpg" // Replace with your actual URL
+  },
+  { 
+    title: "THE MODERN", 
+    subtitle: "STANDARD", 
+    image: "https://your-image-url-2.jpg" 
+  },
+  { 
+    title: "DEFINING", 
+    subtitle: "THE WAY", 
+    image: "https://your-image-url-3.jpg" 
+  },
+];
 
   // Smooth scroll function
   const scrollToShop = () => {
@@ -86,30 +98,57 @@ export default function Home() {
       </nav>
 
       {/* 3. HERO SLIDESHOW */}
-      <section className="relative h-[85vh] flex items-center justify-center overflow-hidden">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={currentSlide}
-            initial={{ opacity: 0, scale: 1.1 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 1.5 }}
-            className={`absolute inset-0 flex flex-col items-center justify-center text-center px-4 ${slides[currentSlide].color}`}
-          >
-            <span className="text-[10px] font-bold tracking-[0.4em] text-gray-400 uppercase mb-4">Premium Grooming Essentials</span>
-            <h1 className="text-6xl md:text-[100px] font-black uppercase italic leading-[0.9] tracking-tighter">
-              {slides[currentSlide].title} <br /> 
-              <span className="text-gray-300">{slides[currentSlide].subtitle}</span>
-            </h1>
-            <button 
-              onClick={scrollToShop}
-              className="mt-10 border-2 border-black text-black px-12 py-4 text-xs font-bold tracking-[0.3em] hover:bg-black hover:text-white transition-all"
-            >
-              SHOP COLLECTION
-            </button>
-          </motion.div>
-        </AnimatePresence>
-      </section>
+<section className="relative h-[85vh] flex items-center justify-center overflow-hidden bg-black">
+  <AnimatePresence mode="wait">
+    <motion.div
+      key={currentSlide}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 1 }}
+      className="absolute inset-0"
+    >
+      {/* The Image */}
+      <img 
+        src={slides[currentSlide].image} 
+        alt="Hero Background"
+        className="w-full h-full object-cover opacity-60" // Opacity makes text pop
+      />
+      
+      {/* The Content Overlay */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4">
+        <motion.span 
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          className="text-[10px] font-bold tracking-[0.4em] text-gray-300 uppercase mb-4"
+        >
+          Premium Grooming Essentials
+        </motion.span>
+        
+        <motion.h1 
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.7 }}
+          className="text-6xl md:text-[100px] font-black uppercase italic leading-[0.9] tracking-tighter text-white"
+        >
+          {slides[currentSlide].title} <br /> 
+          <span className="text-gray-400">{slides[currentSlide].subtitle}</span>
+        </motion.h1>
+
+        <motion.button 
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.9 }}
+          onClick={scrollToShop}
+          className="mt-10 border-2 border-white text-white px-12 py-4 text-xs font-bold tracking-[0.3em] hover:bg-white hover:text-black transition-all"
+        >
+          SHOP COLLECTION
+        </motion.button>
+      </div>
+    </motion.div>
+  </AnimatePresence>
+</section>
 
       {/* 4. PRODUCT SECTION */}
       <section ref={shopSectionRef} className="py-20 px-8 max-w-7xl mx-auto scroll-mt-20">
