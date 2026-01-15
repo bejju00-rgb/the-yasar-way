@@ -1,4 +1,5 @@
 "use client";
+import { supabase } from "@/lib/supabase";
 import { useCartStore } from "@/data/cartStore";
 import { useState } from "react";
 
