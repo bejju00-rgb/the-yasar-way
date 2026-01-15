@@ -60,28 +60,37 @@ export default function Home() {
     <main className="min-h-screen bg-white text-black overflow-hidden">
       
       {/* 1. SLIDING DOORS ANIMATION */}
-      <AnimatePresence>
-        {loading && (
-          <div className="fixed inset-0 z-[100] flex">
-            <motion.div 
-              initial={{ x: 0 }}
-              exit={{ x: "-100%" }}
-              transition={{ duration: 1, ease: [0.77, 0, 0.175, 1] }}
-              className="h-full w-1/2 bg-black flex items-center justify-end"
-            >
-              <span className="text-white text-4xl font-black italic mr-[-60px] z-[110]">THE YASAR</span>
-            </motion.div>
-            <motion.div 
-              initial={{ x: 0 }}
-              exit={{ x: "100%" }}
-              transition={{ duration: 1, ease: [0.77, 0, 0.175, 1] }}
-              className="h-full w-1/2 bg-black flex items-center justify-start"
-            >
-              <span className="text-white text-4xl font-black italic ml-[-40px] z-[110]">WAY</span>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+<AnimatePresence>
+  {loading && (
+    <div className="fixed inset-0 z-[100] flex">
+      {/* Left Door */}
+      <motion.div 
+        initial={{ x: 0 }}
+        exit={{ x: "-100%" }}
+        transition={{ duration: 1, ease: [0.77, 0, 0.175, 1] }}
+        className="h-full w-1/2 bg-black flex items-center justify-end"
+      >
+        {/* Changed mr-[-60px] to pr-10 for a clean gap */}
+        <span className="text-white text-4xl font-black italic pr-10 z-[110] whitespace-nowrap">
+          THE YASAR
+        </span>
+      </motion.div>
+
+      {/* Right Door */}
+      <motion.div 
+        initial={{ x: 0 }}
+        exit={{ x: "100%" }}
+        transition={{ duration: 1, ease: [0.77, 0, 0.175, 1] }}
+        className="h-full w-1/2 bg-black flex items-center justify-start"
+      >
+        {/* Changed ml-[-40px] to pl-10 for a clean gap */}
+        <span className="text-white text-4xl font-black italic pl-10 z-[110] whitespace-nowrap">
+          WAY
+        </span>
+      </motion.div>
+    </div>
+  )}
+</AnimatePresence>
 
       {/* 2. NAVIGATION BAR */}
       <nav className="flex items-center justify-between px-8 py-6 border-b border-gray-100 sticky top-0 bg-white/80 backdrop-blur-md z-50">
