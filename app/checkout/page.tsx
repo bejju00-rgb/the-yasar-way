@@ -1,97 +1,69 @@
 "use client";
-import { supabase } from "@/lib/supabase";
-import { useCartStore } from "../../data/cartStore";
-import { useState } from "react";
+import { useCartStore } from "@/data/cartStore";
+import Link from "next/link";
 
 export default function CheckoutPage() {
-  const { cart, clearCart } = useCartStore();
-  const [method, setMethod] = useState("COD");
-  const [formData, setFormData] = useState({ name: "", phone: "", address: "" });
+  const { cart, removeFromCart, clearCart } = useCartStore();
 
-const totalPrice = cart.reduce((acc, item: any) => {
-  // We use 'any' here to stop TypeScript from complaining about the type
-  const priceValue = typeof item.price === 'string' 
-    ? parseInt(item.price.replace(/[^0-9]/g, '')) 
-    : item.price;
-  return acc + (priceValue * (item.quantity || 1));
-}, 0);
-  const handleOrder = () => {
-    const orderDetails = cart.map(i => `${i.name} (x${i.quantity})`).join(", ");
-    const message = `*NEW ORDER - THE YASAR WAY*%0A%0A` +
-                    `*Name:* ${formData.name}%0A` +
-                    `*Phone:* ${formData.phone}%0A` +
-                    `*Address:* ${formData.address}%0A` +
-                    `*Method:* ${method}%0A` +
-                    `*Items:* ${orderDetails}%0A` +
-                    `*Total:* Rs. ${totalPrice}`;
-
-    // Replace with your actual WhatsApp number
-    const whatsappNumber = "923001234567"; 
-    window.open(`https://wa.me/${whatsappNumber}?text=${message}`, "_blank");
-    clearCart();
-    alert("Order Sent! Please check WhatsApp to confirm.");
-  };
+  const totalPrice = cart.reduce((acc, item: any) => {
+    const price = typeof item.price === 'string' 
+      ? parseInt(item.price.replace(/[^0-9]/g, '')) 
+      : (typeof item.price === 'number' ? item.price : 0);
+    return acc + (price * (item.quantity || 1));
+  }, 0);
 
   return (
-    <div className="min-h-screen bg-white text-black p-8 max-w-4xl mx-auto">
-      <h1 className="text-4xl font-black italic uppercase tracking-tighter mb-10">Checkout</h1>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-        {/* Left: Shipping Info */}
-        <div className="space-y-6">
-          <h2 className="font-bold uppercase tracking-widest text-sm border-b pb-2">Shipping Details</h2>
-          <input 
-            placeholder="Full Name" 
-            className="w-full border-b border-gray-300 py-3 outline-none focus:border-black transition-colors"
-            onChange={(e) => setFormData({...formData, name: e.target.value})}
-          />
-          <input 
-            placeholder="Phone Number (WhatsApp)" 
-            className="w-full border-b border-gray-300 py-3 outline-none focus:border-black transition-colors"
-            onChange={(e) => setFormData({...formData, phone: e.target.value})}
-          />
-          <textarea 
-            placeholder="Full Address" 
-            className="w-full border-b border-gray-300 py-3 outline-none focus:border-black transition-colors"
-            onChange={(e) => setFormData({...formData, address: e.target.value})}
-          />
-        </div>
+    <div className="min-h-screen bg-white text-black p-8 font-sans">
+      <div className="max-w-4xl mx-auto">
+        <Link href="/" className="text-[10px] font-bold tracking-widest uppercase hover:underline">← Back to Shop</Link>
+        <h1 className="text-4xl font-black italic uppercase tracking-tighter mt-6 mb-10 border-b-4 border-black pb-4">Your Bag</h1>
 
-        {/* Right: Payment Method */}
-        <div className="space-y-6">
-          <h2 className="font-bold uppercase tracking-widest text-sm border-b pb-2">Payment Method</h2>
-          <div className="space-y-3">
-            {["Cash on Delivery", "JazzCash", "NayaPay"].map((m) => (
-              <label key={m} className={`flex items-center p-4 border cursor-pointer transition-all ${method === m ? 'border-black bg-gray-50' : 'border-gray-200'}`}>
-                <input 
-                  type="radio" 
-                  name="payment" 
-                  className="accent-black" 
-                  checked={method === m}
-                  onChange={() => setMethod(m)} 
-                />
-                <span className="ml-4 font-bold text-xs uppercase tracking-widest">{m}</span>
-              </label>
-            ))}
+        {cart.length === 0 ? (
+          <div className="py-20 text-center">
+            <p className="text-zinc-400 uppercase tracking-widest text-sm mb-6">Your bag is currently empty.</p>
+            <Link href="/" className="bg-black text-white px-8 py-3 font-bold text-xs uppercase tracking-widest hover:bg-zinc-800 transition-all">Start Shopping</Link>
           </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+            {/* ITEM LIST */}
+            <div className="lg:col-span-2 space-y-8">
+              {cart.map((item: any) => (
+                <div key={item.id} className="flex gap-6 border-b border-zinc-100 pb-8 relative group">
+                  <div className="w-24 h-32 bg-zinc-50 border border-zinc-100 flex-shrink-0">
+                    {item.image_url && <img src={item.image_url} className="w-full h-full object-cover" alt="" />}
+                  </div>
+                  <div className="flex-grow">
+                    <h2 className="font-black uppercase italic text-lg tracking-tighter">{item.name}</h2>
+                    <p className="text-zinc-400 text-xs mt-1 uppercase tracking-widest">{item.tag || 'Grooming Essential'}</p>
+                    <p className="font-bold text-sm mt-4">Rs. {item.price}</p>
+                    <button 
+                      onClick={() => removeFromCart(item.id)}
+                      className="mt-6 text-[10px] font-bold text-red-500 uppercase tracking-widest hover:underline"
+                    >
+                      Remove Item
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
 
-          <div className="bg-gray-50 p-6 mt-6">
-            <div className="flex justify-between font-bold uppercase text-xs tracking-widest mb-2">
-              <span>Subtotal</span>
-              <span>Rs. {totalPrice}</span>
+            {/* SUMMARY BOX */}
+            <div className="bg-zinc-50 p-8 h-fit border border-zinc-100">
+              <h2 className="font-bold uppercase tracking-[0.2em] text-xs mb-6">Order Summary</h2>
+              <div className="flex justify-between border-b border-zinc-200 pb-4 mb-4">
+                <span className="text-sm">Subtotal</span>
+                <span className="font-bold">Rs. {totalPrice}</span>
+              </div>
+              <div className="flex justify-between mb-8">
+                <span className="text-sm">Shipping</span>
+                <span className="text-[10px] font-bold uppercase text-zinc-400">Calculated at next step</span>
+              </div>
+              <button className="w-full bg-black text-white py-4 font-bold text-xs tracking-widest uppercase hover:bg-zinc-800 transition-all">
+                Proceed to Payment
+              </button>
             </div>
-            <div className="flex justify-between font-bold uppercase text-xs tracking-widest text-green-600">
-              <span>Shipping</span>
-              <span>FREE</span>
-            </div>
-            <button 
-              onClick={handleOrder}
-              className="w-full bg-black text-white mt-6 py-4 font-bold text-xs tracking-[0.3em] hover:bg-gray-800 transition-all"
-            >
-              PLACE ORDER VIA WHATSAPP
-            </button>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
