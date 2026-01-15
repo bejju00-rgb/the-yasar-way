@@ -60,7 +60,7 @@ export default function Home() {
               transition={{ duration: 1, ease: [0.77, 0, 0.175, 1] }}
               className="h-full w-1/2 bg-black flex items-center justify-start"
             >
-              <span className="text-white text-4xl font-black italic ml-[-50px] z-[110]">WAY</span>
+              <span className="text-white text-4xl font-black italic ml-[-40px] z-[110]">WAY</span>
             </motion.div>
           </div>
         )}
