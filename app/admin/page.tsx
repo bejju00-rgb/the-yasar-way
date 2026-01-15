@@ -67,3 +67,30 @@ export default function AdminPanel() {
     </div>
   );
 }
+const [orders, setOrders] = useState<any[]>([]);
+
+// Inside useEffect
+const fetchOrders = async () => {
+  const { data } = await supabase.from("orders").select("*").order('created_at', { ascending: false });
+  if (data) setOrders(data);
+};
+fetchOrders();
+
+// In the Return UI (at the bottom)
+<div className="mt-20">
+  <h2 className="text-xl font-bold uppercase mb-6">Recent Orders</h2>
+  {orders.map((order) => (
+    <div key={order.id} className="bg-zinc-900 p-6 border border-zinc-800 mb-4">
+      <div className="flex justify-between">
+        <p className="font-bold uppercase">{order.customer_name}</p>
+        <p className="text-white font-bold">Rs. {order.total_price}</p>
+      </div>
+      <p className="text-zinc-500 text-xs">{order.customer_address}</p>
+      <div className="mt-4 border-t border-zinc-800 pt-2">
+        {order.items.map((item: any) => (
+          <p key={item.id} className="text-[10px] text-zinc-400 uppercase">{item.name} x {item.quantity || 1}</p>
+        ))}
+      </div>
+    </div>
+  ))}
+</div>
