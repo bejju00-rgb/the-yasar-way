@@ -8,7 +8,6 @@ export default function AdminPanel() {
   const [price, setPrice] = useState("");
   const [tag, setTag] = useState("");
 
-  // 1. Fetch products to show in the list
   const fetchProducts = async () => {
     const { data } = await supabase.from("products").select("*");
     if (data) setProducts(data);
@@ -16,47 +15,54 @@ export default function AdminPanel() {
 
   useEffect(() => { fetchProducts(); }, []);
 
-  // 2. Function to add a new product
   const addProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    await supabase.from("products").insert([{ name, price: Number(price), tag }]);
+    // Using "oldPrice" with capital P to match your DB fix
+    await supabase.from("products").insert([{ 
+      name, 
+      price: Number(price), 
+      "oldPrice": (Number(price) * 1.2).toFixed(0), // Auto-generate a fake old price
+      tag 
+    }]);
     setName(""); setPrice(""); setTag("");
-    fetchProducts(); // Refresh list
+    fetchProducts();
   };
 
-  // 3. Function to delete a product
   const deleteProduct = async (id: number) => {
     await supabase.from("products").delete().eq("id", id);
-    fetchProducts(); // Refresh list
+    fetchProducts();
   };
 
   return (
-    <div className="min-h-screen bg-black text-white p-10 font-sans">
-      <h1 className="text-4xl font-black italic uppercase tracking-tighter mb-10">Inventory Management</h1>
+    <div className="min-h-screen bg-black text-white p-6 md:p-12 font-sans">
+      <div className="max-w-4xl mx-auto">
+        <h1 className="text-5xl font-black italic uppercase tracking-tighter mb-2">Inventory</h1>
+        <p className="text-zinc-500 mb-10 tracking-widest text-xs uppercase">The Yasar Way Control Center</p>
 
-      {/* ADD NEW PRODUCT FORM */}
-      <form onSubmit={addProduct} className="mb-20 bg-zinc-900 p-8 rounded-lg border border-zinc-800 max-w-xl">
-        <h2 className="text-xl font-bold mb-6 uppercase">Add New Drop</h2>
-        <div className="space-y-4">
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Product Name" className="w-full bg-black border border-zinc-700 p-3 rounded" required />
-          <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Price (e.g. 1200)" type="number" className="w-full bg-black border border-zinc-700 p-3 rounded" required />
-          <input value={tag} onChange={(e) => setTag(e.target.value)} placeholder="Tag (e.g. NEW or BEST SELLER)" className="w-full bg-black border border-zinc-700 p-3 rounded" />
-          <button type="submit" className="w-full bg-white text-black font-bold py-3 hover:bg-zinc-200 transition-all uppercase italic">List Product</button>
-        </div>
-      </form>
-
-      {/* CURRENT INVENTORY LIST */}
-      <div className="grid gap-4">
-        <h2 className="text-xl font-bold uppercase mb-4">Live Products</h2>
-        {products.map((p) => (
-          <div key={p.id} className="flex justify-between items-center bg-zinc-900 p-6 border-l-4 border-white">
-            <div>
-              <p className="font-bold uppercase tracking-widest">{p.name}</p>
-              <p className="text-zinc-400 text-sm italic">Rs. {p.price}</p>
-            </div>
-            <button onClick={() => deleteProduct(p.id)} className="text-red-500 text-xs font-bold hover:underline uppercase">Remove</button>
+        {/* ADD PRODUCT FORM */}
+        <form onSubmit={addProduct} className="mb-16 bg-zinc-900/50 p-8 border border-zinc-800 backdrop-blur-sm">
+          <h2 className="text-sm font-bold mb-6 tracking-[0.3em] uppercase">Add New Drop</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Product Name" className="bg-black border border-zinc-700 p-3 text-sm focus:border-white outline-none transition-all" required />
+            <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Price (PKR)" type="number" className="bg-black border border-zinc-700 p-3 text-sm focus:border-white outline-none transition-all" required />
+            <input value={tag} onChange={(e) => setTag(e.target.value)} placeholder="Tag (e.g., NEW, SALE)" className="bg-black border border-zinc-700 p-3 text-sm focus:border-white outline-none transition-all md:col-span-2" />
+            <button type="submit" className="md:col-span-2 bg-white text-black font-bold py-4 hover:invert transition-all uppercase text-xs tracking-widest">Update Storefront</button>
           </div>
-        ))}
+        </form>
+
+        {/* LIVE INVENTORY */}
+        <div className="space-y-4">
+          <h2 className="text-sm font-bold mb-6 tracking-[0.3em] uppercase">Live on Site</h2>
+          {products.map((p) => (
+            <div key={p.id} className="flex justify-between items-center bg-zinc-900/30 p-6 border border-zinc-800 hover:border-zinc-500 transition-all">
+              <div>
+                <p className="font-bold uppercase tracking-tighter text-lg italic">{p.name}</p>
+                <p className="text-zinc-500 text-xs mt-1">Rs. {p.price} <span className="ml-2 text-[10px] bg-zinc-800 px-2 py-0.5">{p.tag || 'Standard'}</span></p>
+              </div>
+              <button onClick={() => deleteProduct(p.id)} className="text-zinc-500 hover:text-red-500 text-[10px] font-bold tracking-widest uppercase transition-colors">Delete</button>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
