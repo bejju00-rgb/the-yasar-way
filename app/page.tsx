@@ -18,17 +18,14 @@ export default function Home() {
   ];
 
   useEffect(() => {
-    // 1. Load products from Supabase
     async function getProducts() {
       const { data } = await supabase.from('products').select('*');
       if (data) setDbProducts(data);
     }
     getProducts();
 
-    // 2. Entrance Animation Timer
     const timer = setTimeout(() => setLoading(false), 2000);
     
-    // 3. Slideshow Timer
     const slideTimer = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % slides.length);
     }, 4000);
@@ -110,10 +107,21 @@ export default function Home() {
           {dbProducts.map((product) => (
             <div key={product.id} className="group cursor-pointer">
               <div className="aspect-[4/5] bg-gray-50 flex flex-col items-center justify-center border border-gray-100 relative overflow-hidden transition-all hover:shadow-xl">
-                <span className="text-gray-200 font-bold group-hover:scale-110 transition-transform duration-500 uppercase italic">
-                  {product.name}
-                </span>
-                {/* ADD TO CART BUTTON OVERLAY */}
+                
+                {/* IMAGE LOGIC START */}
+                {product.image_url ? (
+                  <img 
+                    src={product.image_url} 
+                    alt={product.name} 
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                  />
+                ) : (
+                  <span className="text-gray-200 font-bold group-hover:scale-110 transition-transform duration-500 uppercase italic">
+                    {product.name}
+                  </span>
+                )}
+                {/* IMAGE LOGIC END */}
+
                 <button 
                   onClick={() => addToCart(product)}
                   className="absolute bottom-0 w-full bg-black text-white py-4 text-[10px] font-bold tracking-widest translate-y-full group-hover:translate-y-0 transition-transform"
