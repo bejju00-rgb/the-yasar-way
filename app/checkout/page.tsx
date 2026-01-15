@@ -8,8 +8,13 @@ export default function CheckoutPage() {
   const [method, setMethod] = useState("COD");
   const [formData, setFormData] = useState({ name: "", phone: "", address: "" });
 
-  const totalPrice = cart.reduce((acc, item) => acc + (parseInt(item.price.replace(/,/g, '')) * item.quantity), 0);
-
+  const totalPrice = cart.reduce((acc, item) => {
+  // This version handles both text prices (Rs. 100) and number prices (100)
+  const priceValue = typeof item.price === 'string' 
+    ? parseInt(item.price.replace(/[^0-9]/g, '')) 
+    : item.price;
+  return acc + (priceValue * item.quantity);
+}, 0);
   const handleOrder = () => {
     const orderDetails = cart.map(i => `${i.name} (x${i.quantity})`).join(", ");
     const message = `*NEW ORDER - THE YASAR WAY*%0A%0A` +
