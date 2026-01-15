@@ -8,12 +8,12 @@ export default function CheckoutPage() {
   const [method, setMethod] = useState("COD");
   const [formData, setFormData] = useState({ name: "", phone: "", address: "" });
 
-  const totalPrice = cart.reduce((acc, item) => {
-  // This version handles both text prices (Rs. 100) and number prices (100)
+const totalPrice = cart.reduce((acc, item: any) => {
+  // We use 'any' here to stop TypeScript from complaining about the type
   const priceValue = typeof item.price === 'string' 
     ? parseInt(item.price.replace(/[^0-9]/g, '')) 
     : item.price;
-  return acc + (priceValue * item.quantity);
+  return acc + (priceValue * (item.quantity || 1));
 }, 0);
   const handleOrder = () => {
     const orderDetails = cart.map(i => `${i.name} (x${i.quantity})`).join(", ");
