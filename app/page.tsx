@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react"; // Added useRef
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { useCartStore } from "@/data/cartStore";
@@ -10,12 +10,20 @@ export default function Home() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [dbProducts, setDbProducts] = useState<any[]>([]);
   const { cart, addToCart } = useCartStore();
+  
+  // Reference for the product section to enable scrolling
+  const shopSectionRef = useRef<HTMLDivElement>(null);
 
   const slides = [
     { title: "ELEVATE YOUR", subtitle: "EVERYDAY", color: "bg-[#fcfcfc]" },
     { title: "THE MODERN", subtitle: "STANDARD", color: "bg-[#f4f4f4]" },
     { title: "DEFINING", subtitle: "THE WAY", color: "bg-[#eeeeee]" },
   ];
+
+  // Smooth scroll function
+  const scrollToShop = () => {
+    shopSectionRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   useEffect(() => {
     async function getProducts() {
@@ -65,10 +73,10 @@ export default function Home() {
 
       {/* 2. NAVIGATION BAR */}
       <nav className="flex items-center justify-between px-8 py-6 border-b border-gray-100 sticky top-0 bg-white/80 backdrop-blur-md z-50">
-        <div className="text-2xl font-black tracking-tighter uppercase italic">THE YASAR WAY</div>
+        <Link href="/" className="text-2xl font-black tracking-tighter uppercase italic">THE YASAR WAY</Link>
         <div className="hidden md:flex space-x-10 text-[10px] font-bold tracking-[0.2em]">
-          <a href="#" className="hover:text-gray-400 uppercase">Home</a>
-          <a href="#" className="hover:text-gray-400 uppercase">Shop All</a>
+          <Link href="/" className="hover:text-gray-400 uppercase">Home</Link>
+          <button onClick={scrollToShop} className="hover:text-gray-400 uppercase">Shop All</button>
         </div>
         <Link href="/checkout">
           <div className="text-[10px] font-bold tracking-widest border-b-2 border-black pb-1 cursor-pointer">
@@ -93,7 +101,10 @@ export default function Home() {
               {slides[currentSlide].title} <br /> 
               <span className="text-gray-300">{slides[currentSlide].subtitle}</span>
             </h1>
-            <button className="mt-10 border-2 border-black text-black px-12 py-4 text-xs font-bold tracking-[0.3em] hover:bg-black hover:text-white transition-all">
+            <button 
+              onClick={scrollToShop}
+              className="mt-10 border-2 border-black text-black px-12 py-4 text-xs font-bold tracking-[0.3em] hover:bg-black hover:text-white transition-all"
+            >
               SHOP COLLECTION
             </button>
           </motion.div>
@@ -101,14 +112,13 @@ export default function Home() {
       </section>
 
       {/* 4. PRODUCT SECTION */}
-      <section className="py-20 px-8 max-w-7xl mx-auto">
+      <section ref={shopSectionRef} className="py-20 px-8 max-w-7xl mx-auto scroll-mt-20">
         <h2 className="text-2xl font-black uppercase italic tracking-tighter mb-12 text-center">New Drops</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {dbProducts.map((product) => (
             <div key={product.id} className="group cursor-pointer">
               <div className="aspect-[4/5] bg-gray-50 flex flex-col items-center justify-center border border-gray-100 relative overflow-hidden transition-all hover:shadow-xl">
                 
-                {/* IMAGE LOGIC START */}
                 {product.image_url ? (
                   <img 
                     src={product.image_url} 
@@ -120,7 +130,6 @@ export default function Home() {
                     {product.name}
                   </span>
                 )}
-                {/* IMAGE LOGIC END */}
 
                 <button 
                   onClick={() => addToCart(product)}
