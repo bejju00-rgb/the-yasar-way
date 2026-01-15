@@ -1,6 +1,6 @@
 "use client";
 import { supabase } from "@/lib/supabase";
-import { useCartStore } from "@/data/cartStore";
+import { useCartStore } from "../../data/cartStore";
 import { useState } from "react";
 
 export default function CheckoutPage() {
