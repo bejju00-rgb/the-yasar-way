@@ -38,7 +38,7 @@ export default function CheckoutPage() {
       const itemDetails = cart.map((i: any) => `- ${i.name} (Rs. ${i.price})`).join('%0A');
       const message = `*THE YASAR WAY - NEW ORDER*%0A%0A*Customer:* ${orderData.customer_name}%0A*Phone:* ${orderData.customer_phone}%0A*Address:* ${orderData.customer_address}%0A*Method:* ${paymentMethod}%0A%0A*Items:*%0A${itemDetails}%0A%0A*TOTAL:* Rs. ${totalPrice}`;
       
-      const whatsappNumber = "923168032605"; // Change this to your 92... number
+      const whatsappNumber = "923247875183"; // Change this to your 92... number
       
       setOrderComplete(true);
       clearCart();
