@@ -24,27 +24,29 @@ export default function CheckoutPage() {
     const formData = new FormData(e.target as HTMLFormElement);
     const orderData = {
       customer_name: formData.get("name"),
+      customer_email: formData.get("email"), // NEW: Added Email
       customer_phone: formData.get("phone"),
       customer_address: formData.get("address"),
       payment_method: paymentMethod,
       total_price: totalPrice,
       items: cart,
+      status: 'Pending' // Explicitly set starting status
     };
 
     const { error } = await supabase.from("orders").insert([orderData]);
 
     if (!error) {
-      // Formatting WhatsApp message for a professional look
       const itemDetails = cart.map((i: any) => `- ${i.name} (Rs. ${i.price})`).join('%0A');
-      const message = `*THE YASAR WAY - NEW ORDER*%0A%0A*Customer:* ${orderData.customer_name}%0A*Phone:* ${orderData.customer_phone}%0A*Address:* ${orderData.customer_address}%0A*Method:* ${paymentMethod}%0A%0A*Items:*%0A${itemDetails}%0A%0A*TOTAL:* Rs. ${totalPrice}`;
+      // Added Email to the WhatsApp message too so you see it in your chat
+      const message = `*THE YASAR WAY - NEW ORDER*%0A%0A*Customer:* ${orderData.customer_name}%0A*Email:* ${orderData.customer_email}%0A*Phone:* ${orderData.customer_phone}%0A*Address:* ${orderData.customer_address}%0A*Method:* ${paymentMethod}%0A%0A*Items:*%0A${itemDetails}%0A%0A*TOTAL:* Rs. ${totalPrice}`;
       
-      const whatsappNumber = "923247875183"; // Change this to your 92... number
+      const whatsappNumber = "923247875183"; 
       
       setOrderComplete(true);
       clearCart();
       window.open(`https://wa.me/${whatsappNumber}?text=${message}`, '_blank');
     } else {
-      alert("Something went wrong. Check your internet or try again.");
+      alert("Something went wrong: " + error.message);
     }
     setIsOrdering(false);
   };
@@ -77,6 +79,10 @@ export default function CheckoutPage() {
               <h2 className="text-2xl font-black italic uppercase tracking-tighter mb-8 border-b-4 border-black inline-block">Shipping</h2>
               <form id="checkout-form" onSubmit={handlePlaceOrder} className="space-y-4">
                 <input name="name" placeholder="Full Name" className="w-full border-2 border-zinc-100 p-4 outline-none focus:border-black transition-all bg-zinc-50/50" required />
+                
+                {/* NEW EMAIL INPUT */}
+                <input name="email" type="email" placeholder="Gmail Address" className="w-full border-2 border-zinc-100 p-4 outline-none focus:border-black transition-all bg-zinc-50/50" required />
+                
                 <input name="phone" placeholder="WhatsApp Number" className="w-full border-2 border-zinc-100 p-4 outline-none focus:border-black transition-all bg-zinc-50/50" required />
                 <textarea name="address" placeholder="Delivery Address" className="w-full border-2 border-zinc-100 p-4 outline-none focus:border-black transition-all bg-zinc-50/50" rows={4} required />
               </form>
@@ -87,6 +93,7 @@ export default function CheckoutPage() {
                   {['COD', 'JazzCash', 'NayaPay'].map((method) => (
                     <button 
                       key={method}
+                      type="button"
                       onClick={() => setPaymentMethod(method)}
                       className={`py-4 border-2 font-bold text-[10px] tracking-widest uppercase transition-all ${paymentMethod === method ? 'bg-black text-white border-black' : 'border-zinc-100 text-zinc-400 hover:border-zinc-300'}`}
                     >
