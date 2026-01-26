@@ -9,20 +9,31 @@ export default function AdminPanel() {
   // App State
   const [products, setProducts] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
-  const [isUpdating, setIsUpdating] = useState<number | null>(null); // Track specific order ID
+  const [isUpdating, setIsUpdating] = useState<number | null>(null);
 
   // Form State
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
-  const [oldPrice, setOldPrice] = useState(""); // Custom Sale Price
+  const [oldPrice, setOldPrice] = useState(""); 
   const [imageUrl, setImageUrl] = useState("");
   const [tag, setTag] = useState("");
 
   const fetchData = async () => {
-    const { data: prodData } = await supabase.from("products").select("*").order('created_at', { ascending: false });
+    // Improved fetching logic
+    const { data: prodData, error: prodError } = await supabase
+      .from("products")
+      .select("*")
+      .order('created_at', { ascending: false });
+    
+    if (prodError) console.error("Error fetching products:", prodError.message);
     if (prodData) setProducts(prodData);
 
-    const { data: ordData } = await supabase.from("orders").select("*").order('created_at', { ascending: false });
+    const { data: ordData, error: ordError } = await supabase
+      .from("orders")
+      .select("*")
+      .order('created_at', { ascending: false });
+    
+    if (ordError) console.error("Error fetching orders:", ordError.message);
     if (ordData) setOrders(ordData);
   };
 
@@ -43,19 +54,22 @@ export default function AdminPanel() {
 
   const addProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Use manual oldPrice if provided, otherwise auto-calculate 20% higher for "Sale" look
     const finalOldPrice = oldPrice ? Number(oldPrice) : (Number(price) * 1.2).toFixed(0);
     
-    await supabase.from("products").insert([{ 
+    const { error } = await supabase.from("products").insert([{ 
       name, 
       price: Number(price), 
       image_url: imageUrl, 
-      "oldPrice": finalOldPrice, 
+      oldPrice: Number(finalOldPrice), // Ensure this matches your DB column name exactly
       tag 
     }]);
     
-    setName(""); setPrice(""); setOldPrice(""); setImageUrl(""); setTag("");
-    fetchData();
+    if (error) {
+      alert("Failed to add product: " + error.message);
+    } else {
+      setName(""); setPrice(""); setOldPrice(""); setImageUrl(""); setTag("");
+      fetchData();
+    }
   };
 
   const deleteProduct = async (id: number) => {
@@ -66,7 +80,7 @@ export default function AdminPanel() {
   };
 
   const updateStatus = async (id: number, newStatus: string) => {
-    setIsUpdating(id); // Set loading for this specific button
+    setIsUpdating(id);
     const { error } = await supabase
       .from("orders")
       .update({ status: newStatus })
@@ -77,7 +91,7 @@ export default function AdminPanel() {
     }
     
     await fetchData();
-    setIsUpdating(null); // Remove loading state
+    setIsUpdating(null);
   };
 
   const downloadCSV = () => {
@@ -165,7 +179,8 @@ export default function AdminPanel() {
 
             <section>
               <h2 className="text-xl font-bold uppercase italic border-b border-zinc-800 pb-2 mb-6">Live Catalog</h2>
-              <div className="grid grid-cols-1 gap-2">
+              <div className="grid grid-cols-1 gap-2 max-h-[500px] overflow-y-auto pr-2">
+                {products.length === 0 && <p className="text-zinc-600 uppercase text-[9px] tracking-widest italic">No products in catalog.</p>}
                 {products.map(p => (
                   <div key={p.id} className="flex justify-between items-center bg-zinc-900/40 p-4 border border-zinc-800 group">
                     <div className="flex items-center gap-4">
@@ -177,7 +192,7 @@ export default function AdminPanel() {
                       <div>
                         <p className="font-bold text-xs uppercase italic">{p.name}</p>
                         <p className="text-zinc-500 text-[10px]">
-                            Rs. {p.price} <span className="line-through ml-2 opacity-50">{p.oldPrice}</span>
+                            Rs. {p.price} {p.oldPrice && <span className="line-through ml-2 opacity-50">Rs. {p.oldPrice}</span>}
                         </p>
                       </div>
                     </div>
