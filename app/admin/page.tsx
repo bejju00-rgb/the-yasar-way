@@ -16,28 +16,33 @@ export default function AdminPanel() {
   const [oldPrice, setOldPrice] = useState(""); 
   const [imageUrl, setImageUrl] = useState("");
   const [tag, setTag] = useState("");
-  const [stock, setStock] = useState(""); // New State for Stock
+  const [stock, setStock] = useState(""); // Track stock locally
 
   const fetchData = async () => {
+    // 1. Fetch Products
     const { data: prodData, error: prodError } = await supabase
       .from("products")
       .select("*")
       .order('created_at', { ascending: false });
     
-    if (prodError) console.error("Error fetching products:", prodError.message);
+    if (prodError) console.error("Product fetch error:", prodError.message);
     if (prodData) setProducts(prodData);
 
+    // 2. Fetch Orders
     const { data: ordData, error: ordError } = await supabase
       .from("orders")
       .select("*")
       .order('created_at', { ascending: false });
     
-    if (ordError) console.error("Error fetching orders:", ordError.message);
+    if (ordError) console.error("Order fetch error:", ordError.message);
     if (ordData) setOrders(ordData);
   };
 
+  // This ensures data loads immediately upon login
   useEffect(() => {
-    if (isAuthenticated) fetchData();
+    if (isAuthenticated) {
+      fetchData();
+    }
   }, [isAuthenticated]);
 
   const handleLogin = (e: React.FormEvent) => {
@@ -59,28 +64,25 @@ export default function AdminPanel() {
       name, 
       price: Number(price), 
       image_url: imageUrl, 
-      oldPrice: Number(finalOldPrice),
+      oldPrice: Number(finalOldPrice), // Column name matches your screenshot
       tag,
-      stock: Number(stock) || 0 // Saves Stock to DB
+      stock: Number(stock) || 0 
     }]);
     
     if (error) {
-      alert("Failed to add product: " + error.message);
+      alert("Failed to add: " + error.message);
     } else {
       setName(""); setPrice(""); setOldPrice(""); setImageUrl(""); setTag(""); setStock("");
       fetchData();
     }
   };
 
-  // REMOVE PRODUCT FUNCTION
+  // FULLY FUNCTIONAL REMOVE BUTTON
   const deleteProduct = async (id: number) => {
-    if(confirm("Are you sure you want to delete this product? This cannot be undone.")) {
+    if(confirm("Permanently remove this item from catalog?")) {
       const { error } = await supabase.from("products").delete().eq("id", id);
-      if (error) {
-        alert("Error deleting product: " + error.message);
-      } else {
-        fetchData(); // Refresh the list
-      }
+      if (error) alert("Delete failed: " + error.message);
+      fetchData();
     }
   };
 
@@ -100,7 +102,7 @@ export default function AdminPanel() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `YasarWay_Orders_${new Date().toLocaleDateString()}.csv`;
+    link.download = `YasarWay_Orders.csv`;
     link.click();
   };
 
@@ -108,9 +110,15 @@ export default function AdminPanel() {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-6">
         <form onSubmit={handleLogin} className="w-full max-w-sm bg-zinc-900 p-8 border border-zinc-800">
-          <h1 className="text-2xl font-black italic uppercase text-white mb-6 tracking-tighter">HQ ACCESS</h1>
-          <input type="password" placeholder="Enter Master Password" className="w-full bg-black border border-zinc-700 p-4 text-white outline-none mb-4 focus:border-white transition-all" value={password} onChange={(e) => setPassword(e.target.value)} />
-          <button className="w-full bg-white text-black font-bold py-4 uppercase tracking-widest text-xs hover:bg-zinc-200 transition-all">Authorize</button>
+          <h1 className="text-2xl font-black italic uppercase text-white mb-6 tracking-tighter text-center">HQ ACCESS</h1>
+          <input 
+            type="password" 
+            placeholder="Master Password" 
+            className="w-full bg-black border border-zinc-700 p-4 text-white outline-none mb-4 focus:border-white transition-all text-center"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <button className="w-full bg-white text-black font-bold py-4 uppercase tracking-[0.3em] text-xs hover:bg-zinc-200 transition-all">Authorize</button>
         </form>
       </div>
     );
@@ -127,14 +135,14 @@ export default function AdminPanel() {
           <button onClick={downloadCSV} className="text-[10px] font-bold uppercase border border-zinc-700 px-6 py-3 hover:bg-white hover:text-black transition-all tracking-widest">Export Orders</button>
         </div>
 
-        {/* STATS */}
+        {/* REVENUE STATS */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
             <div className="md:col-span-2 bg-zinc-900 border border-zinc-800 p-10">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Total Accumulated Revenue</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Total Revenue</p>
                 <p className="text-6xl font-black italic tracking-tighter">Rs. {totalRevenue.toLocaleString()}</p>
             </div>
             <div className="bg-zinc-900 border border-zinc-800 p-10 flex flex-col justify-center">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Orders Count</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Total Orders</p>
                 <p className="text-4xl font-black italic tracking-tighter">{orders.length}</p>
             </div>
         </div>
@@ -145,40 +153,40 @@ export default function AdminPanel() {
               <h2 className="text-xl font-bold uppercase italic border-b border-zinc-800 pb-2 mb-6 tracking-widest">Inventory Management</h2>
               <form onSubmit={addProduct} className="grid grid-cols-2 gap-3 bg-zinc-900/30 p-6 border border-zinc-800">
                 <div className="col-span-2">
-                    <label className="text-[9px] uppercase text-zinc-500 font-bold mb-1 block">Product Title</label>
-                    <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Matte Wax" className="w-full bg-black p-3 text-sm border border-zinc-800 outline-none focus:border-zinc-500" required />
+                    <label className="text-[9px] uppercase text-zinc-500 font-bold mb-1 block">Title</label>
+                    <input value={name} onChange={(e) => setName(e.target.value)} className="w-full bg-black p-3 text-sm border border-zinc-800 outline-none focus:border-zinc-500" required />
                 </div>
                 <div>
-                    <label className="text-[9px] uppercase text-zinc-500 font-bold mb-1 block">Current Price (PKR)</label>
-                    <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="1500" type="number" className="w-full bg-black p-3 text-sm border border-zinc-800 outline-none focus:border-zinc-500" required />
+                    <label className="text-[9px] uppercase text-zinc-500 font-bold mb-1 block">Price</label>
+                    <input value={price} onChange={(e) => setPrice(e.target.value)} type="number" className="w-full bg-black p-3 text-sm border border-zinc-800 outline-none focus:border-zinc-500" required />
                 </div>
                 <div>
                     <label className="text-[9px] uppercase text-zinc-500 font-bold mb-1 block">Stock Quantity</label>
-                    <input value={stock} onChange={(e) => setStock(e.target.value)} placeholder="50" type="number" className="w-full bg-black p-3 text-sm border border-zinc-800 outline-none focus:border-zinc-500" required />
+                    <input value={stock} onChange={(e) => setStock(e.target.value)} type="number" className="w-full bg-black p-3 text-sm border border-zinc-800 outline-none focus:border-zinc-500" placeholder="0" />
                 </div>
                 <div className="col-span-2">
                     <label className="text-[9px] uppercase text-zinc-500 font-bold mb-1 block">Image URL</label>
-                    <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://..." className="w-full bg-black p-3 text-sm border border-zinc-800 outline-none focus:border-zinc-500" />
+                    <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className="w-full bg-black p-3 text-sm border border-zinc-800 outline-none focus:border-zinc-500" />
                 </div>
                 <button className="col-span-2 bg-white text-black font-bold py-4 uppercase text-[10px] tracking-[0.3em] mt-2 hover:invert transition-all">Update Digital Catalog</button>
               </form>
             </section>
 
             <section>
-              <h2 className="text-xl font-bold uppercase italic border-b border-zinc-800 pb-2 mb-6">Live Catalog</h2>
+              <h2 className="text-xl font-bold uppercase italic border-b border-zinc-800 pb-2 mb-6 tracking-widest text-white">Live Catalog</h2>
               <div className="grid grid-cols-1 gap-2 max-h-[500px] overflow-y-auto pr-2">
+                {products.length === 0 && <p className="text-zinc-600 uppercase text-[9px] tracking-widest italic">Syncing with database...</p>}
                 {products.map(p => (
                   <div key={p.id} className="flex justify-between items-center bg-zinc-900/40 p-4 border border-zinc-800 group">
                     <div className="flex items-center gap-4">
-                      <img src={p.image_url} className="w-12 h-12 object-cover border border-zinc-800" alt="" />
+                      <img src={p.image_url || 'https://via.placeholder.com/50'} className="w-12 h-12 object-cover border border-zinc-800" alt="" />
                       <div>
                         <p className="font-bold text-xs uppercase italic">{p.name}</p>
-                        <p className="text-zinc-500 text-[10px]">
-                            Rs. {p.price} • <span className={p.stock < 10 ? "text-red-500" : "text-green-500"}>{p.stock} in stock</span>
+                        <p className="text-zinc-500 text-[10px] uppercase">
+                            Rs. {p.price} • {p.stock || 0} In Stock
                         </p>
                       </div>
                     </div>
-                    {/* WORKING REMOVE BUTTON */}
                     <button onClick={() => deleteProduct(p.id)} className="text-red-500 opacity-0 group-hover:opacity-100 text-[9px] font-bold uppercase tracking-widest transition-all hover:underline">Remove</button>
                   </div>
                 ))}
@@ -186,23 +194,17 @@ export default function AdminPanel() {
             </section>
           </div>
 
-          {/* ORDERS SECTION (Same as before) */}
           <div>
             <h2 className="text-xl font-bold uppercase italic border-b border-zinc-800 pb-2 mb-6 tracking-widest">Order Stream</h2>
             <div className="space-y-4">
               {orders.map((order) => (
-                <div key={order.id} className={`p-6 border ${order.status === 'Shipped' ? 'bg-zinc-900/20 border-zinc-900 opacity-40' : 'bg-zinc-900 border-zinc-800'}`}>
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <p className="font-black italic uppercase text-lg tracking-tighter">{order.customer_name}</p>
-                      <p className="text-[10px] text-zinc-500 uppercase font-bold">{order.customer_phone}</p>
-                    </div>
-                    <div className="text-right">
-                        <p className="font-black italic text-xl">Rs. {order.total_price}</p>
-                    </div>
+                <div key={order.id} className={`p-6 border ${order.status === 'Shipped' ? 'bg-zinc-900/20 border-zinc-900 opacity-40' : 'bg-zinc-900 border-zinc-800 shadow-xl'}`}>
+                  <div className="flex justify-between items-start mb-4 text-white">
+                    <p className="font-black italic uppercase text-lg tracking-tighter">{order.customer_name}</p>
+                    <p className="font-black italic text-xl">Rs. {order.total_price}</p>
                   </div>
                   {order.status !== 'Shipped' && (
-                    <button onClick={() => updateStatus(order.id, 'Shipped')} className="w-full bg-white text-black text-[9px] font-bold py-3 uppercase tracking-[0.3em]">Confirm Shipment</button>
+                    <button onClick={() => updateStatus(order.id, 'Shipped')} className="w-full bg-white text-black text-[9px] font-bold py-3 uppercase tracking-[0.3em] hover:invert transition-all">Confirm Shipment</button>
                   )}
                 </div>
               ))}
