@@ -16,7 +16,7 @@ export default function AdminPanel() {
   const [oldPrice, setOldPrice] = useState(""); 
   const [imageUrl, setImageUrl] = useState("");
   const [tag, setTag] = useState("");
-  const [stock, setStock] = useState(""); // Track stock locally
+  const [stock, setStock] = useState(""); 
 
   const fetchData = async () => {
     // 1. Fetch Products
@@ -25,8 +25,11 @@ export default function AdminPanel() {
       .select("*")
       .order('created_at', { ascending: false });
     
-    if (prodError) console.error("Product fetch error:", prodError.message);
-    if (prodData) setProducts(prodData);
+    if (prodError) {
+      console.error("Product fetch error:", prodError.message);
+    } else {
+      setProducts(prodData || []);
+    }
 
     // 2. Fetch Orders
     const { data: ordData, error: ordError } = await supabase
@@ -34,11 +37,13 @@ export default function AdminPanel() {
       .select("*")
       .order('created_at', { ascending: false });
     
-    if (ordError) console.error("Order fetch error:", ordError.message);
-    if (ordData) setOrders(ordData);
+    if (ordError) {
+      console.error("Order fetch error:", ordError.message);
+    } else {
+      setOrders(ordData || []);
+    }
   };
 
-  // This ensures data loads immediately upon login
   useEffect(() => {
     if (isAuthenticated) {
       fetchData();
@@ -60,14 +65,20 @@ export default function AdminPanel() {
     e.preventDefault();
     const finalOldPrice = oldPrice ? Number(oldPrice) : (Number(price) * 1.2).toFixed(0);
     
-    const { error } = await supabase.from("products").insert([{ 
+    // Note: If you haven't added the 'stock' column in Supabase yet, 
+    // remove the 'stock' line below or it will show an error.
+    const productData: any = { 
       name, 
       price: Number(price), 
       image_url: imageUrl, 
-      oldPrice: Number(finalOldPrice), // Column name matches your screenshot
-      tag,
-      stock: Number(stock) || 0 
-    }]);
+      oldPrice: Number(finalOldPrice),
+      tag
+    };
+
+    // Only add stock to the upload if you have added the column to Supabase
+    if (stock) productData.stock = Number(stock);
+
+    const { error } = await supabase.from("products").insert([productData]);
     
     if (error) {
       alert("Failed to add: " + error.message);
@@ -77,7 +88,6 @@ export default function AdminPanel() {
     }
   };
 
-  // FULLY FUNCTIONAL REMOVE BUTTON
   const deleteProduct = async (id: number) => {
     if(confirm("Permanently remove this item from catalog?")) {
       const { error } = await supabase.from("products").delete().eq("id", id);
@@ -135,7 +145,6 @@ export default function AdminPanel() {
           <button onClick={downloadCSV} className="text-[10px] font-bold uppercase border border-zinc-700 px-6 py-3 hover:bg-white hover:text-black transition-all tracking-widest">Export Orders</button>
         </div>
 
-        {/* REVENUE STATS */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
             <div className="md:col-span-2 bg-zinc-900 border border-zinc-800 p-10">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Total Revenue</p>
@@ -161,7 +170,7 @@ export default function AdminPanel() {
                     <input value={price} onChange={(e) => setPrice(e.target.value)} type="number" className="w-full bg-black p-3 text-sm border border-zinc-800 outline-none focus:border-zinc-500" required />
                 </div>
                 <div>
-                    <label className="text-[9px] uppercase text-zinc-500 font-bold mb-1 block">Stock Quantity</label>
+                    <label className="text-[9px] uppercase text-zinc-500 font-bold mb-1 block">Stock (Optional)</label>
                     <input value={stock} onChange={(e) => setStock(e.target.value)} type="number" className="w-full bg-black p-3 text-sm border border-zinc-800 outline-none focus:border-zinc-500" placeholder="0" />
                 </div>
                 <div className="col-span-2">
@@ -175,7 +184,7 @@ export default function AdminPanel() {
             <section>
               <h2 className="text-xl font-bold uppercase italic border-b border-zinc-800 pb-2 mb-6 tracking-widest text-white">Live Catalog</h2>
               <div className="grid grid-cols-1 gap-2 max-h-[500px] overflow-y-auto pr-2">
-                {products.length === 0 && <p className="text-zinc-600 uppercase text-[9px] tracking-widest italic">Syncing with database...</p>}
+                {products.length === 0 && <p className="text-zinc-600 uppercase text-[9px] tracking-widest italic">No products found.</p>}
                 {products.map(p => (
                   <div key={p.id} className="flex justify-between items-center bg-zinc-900/40 p-4 border border-zinc-800 group">
                     <div className="flex items-center gap-4">
@@ -183,7 +192,7 @@ export default function AdminPanel() {
                       <div>
                         <p className="font-bold text-xs uppercase italic">{p.name}</p>
                         <p className="text-zinc-500 text-[10px] uppercase">
-                            Rs. {p.price} • {p.stock || 0} In Stock
+                            Rs. {p.price} {p.stock !== undefined && `• ${p.stock} In Stock`}
                         </p>
                       </div>
                     </div>
