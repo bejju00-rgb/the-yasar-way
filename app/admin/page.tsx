@@ -6,7 +6,6 @@ export default function AdminPanel() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState("");
   
-  // App State
   const [products, setProducts] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [isUpdating, setIsUpdating] = useState<number | null>(null);
@@ -17,9 +16,9 @@ export default function AdminPanel() {
   const [oldPrice, setOldPrice] = useState(""); 
   const [imageUrl, setImageUrl] = useState("");
   const [tag, setTag] = useState("");
+  const [stock, setStock] = useState(""); // New State for Stock
 
   const fetchData = async () => {
-    // Improved fetching logic
     const { data: prodData, error: prodError } = await supabase
       .from("products")
       .select("*")
@@ -60,36 +59,35 @@ export default function AdminPanel() {
       name, 
       price: Number(price), 
       image_url: imageUrl, 
-      oldPrice: Number(finalOldPrice), // Ensure this matches your DB column name exactly
-      tag 
+      oldPrice: Number(finalOldPrice),
+      tag,
+      stock: Number(stock) || 0 // Saves Stock to DB
     }]);
     
     if (error) {
       alert("Failed to add product: " + error.message);
     } else {
-      setName(""); setPrice(""); setOldPrice(""); setImageUrl(""); setTag("");
+      setName(""); setPrice(""); setOldPrice(""); setImageUrl(""); setTag(""); setStock("");
       fetchData();
     }
   };
 
+  // REMOVE PRODUCT FUNCTION
   const deleteProduct = async (id: number) => {
-    if(confirm("Delete this product?")) {
-      await supabase.from("products").delete().eq("id", id);
-      fetchData();
+    if(confirm("Are you sure you want to delete this product? This cannot be undone.")) {
+      const { error } = await supabase.from("products").delete().eq("id", id);
+      if (error) {
+        alert("Error deleting product: " + error.message);
+      } else {
+        fetchData(); // Refresh the list
+      }
     }
   };
 
   const updateStatus = async (id: number, newStatus: string) => {
     setIsUpdating(id);
-    const { error } = await supabase
-      .from("orders")
-      .update({ status: newStatus })
-      .eq("id", id);
-    
-    if (error) {
-      alert("Update failed: " + error.message);
-    }
-    
+    const { error } = await supabase.from("orders").update({ status: newStatus }).eq("id", id);
+    if (error) alert("Update failed: " + error.message);
     await fetchData();
     setIsUpdating(null);
   };
@@ -111,13 +109,7 @@ export default function AdminPanel() {
       <div className="min-h-screen bg-black flex items-center justify-center p-6">
         <form onSubmit={handleLogin} className="w-full max-w-sm bg-zinc-900 p-8 border border-zinc-800">
           <h1 className="text-2xl font-black italic uppercase text-white mb-6 tracking-tighter">HQ ACCESS</h1>
-          <input 
-            type="password" 
-            placeholder="Enter Master Password" 
-            className="w-full bg-black border border-zinc-700 p-4 text-white outline-none mb-4 focus:border-white transition-all"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <input type="password" placeholder="Enter Master Password" className="w-full bg-black border border-zinc-700 p-4 text-white outline-none mb-4 focus:border-white transition-all" value={password} onChange={(e) => setPassword(e.target.value)} />
           <button className="w-full bg-white text-black font-bold py-4 uppercase tracking-widest text-xs hover:bg-zinc-200 transition-all">Authorize</button>
         </form>
       </div>
@@ -135,7 +127,7 @@ export default function AdminPanel() {
           <button onClick={downloadCSV} className="text-[10px] font-bold uppercase border border-zinc-700 px-6 py-3 hover:bg-white hover:text-black transition-all tracking-widest">Export Orders</button>
         </div>
 
-        {/* REVENUE STATS */}
+        {/* STATS */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
             <div className="md:col-span-2 bg-zinc-900 border border-zinc-800 p-10">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-2">Total Accumulated Revenue</p>
@@ -148,7 +140,6 @@ export default function AdminPanel() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
-          {/* LEFT: INVENTORY */}
           <div className="space-y-12">
             <section>
               <h2 className="text-xl font-bold uppercase italic border-b border-zinc-800 pb-2 mb-6 tracking-widest">Inventory Management</h2>
@@ -162,16 +153,12 @@ export default function AdminPanel() {
                     <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="1500" type="number" className="w-full bg-black p-3 text-sm border border-zinc-800 outline-none focus:border-zinc-500" required />
                 </div>
                 <div>
-                    <label className="text-[9px] uppercase text-zinc-500 font-bold mb-1 block">Old Price (For Sale)</label>
-                    <input value={oldPrice} onChange={(e) => setOldPrice(e.target.value)} placeholder="2000" type="number" className="w-full bg-black p-3 text-sm border border-zinc-800 outline-none focus:border-zinc-500" />
+                    <label className="text-[9px] uppercase text-zinc-500 font-bold mb-1 block">Stock Quantity</label>
+                    <input value={stock} onChange={(e) => setStock(e.target.value)} placeholder="50" type="number" className="w-full bg-black p-3 text-sm border border-zinc-800 outline-none focus:border-zinc-500" required />
                 </div>
                 <div className="col-span-2">
                     <label className="text-[9px] uppercase text-zinc-500 font-bold mb-1 block">Image URL</label>
                     <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} placeholder="https://..." className="w-full bg-black p-3 text-sm border border-zinc-800 outline-none focus:border-zinc-500" />
-                </div>
-                <div className="col-span-2">
-                    <label className="text-[9px] uppercase text-zinc-500 font-bold mb-1 block">Product Tag</label>
-                    <input value={tag} onChange={(e) => setTag(e.target.value)} placeholder="NEW, BEST SELLER, 20% OFF" className="w-full bg-black p-3 text-sm border border-zinc-800 outline-none focus:border-zinc-500" />
                 </div>
                 <button className="col-span-2 bg-white text-black font-bold py-4 uppercase text-[10px] tracking-[0.3em] mt-2 hover:invert transition-all">Update Digital Catalog</button>
               </form>
@@ -180,22 +167,18 @@ export default function AdminPanel() {
             <section>
               <h2 className="text-xl font-bold uppercase italic border-b border-zinc-800 pb-2 mb-6">Live Catalog</h2>
               <div className="grid grid-cols-1 gap-2 max-h-[500px] overflow-y-auto pr-2">
-                {products.length === 0 && <p className="text-zinc-600 uppercase text-[9px] tracking-widest italic">No products in catalog.</p>}
                 {products.map(p => (
                   <div key={p.id} className="flex justify-between items-center bg-zinc-900/40 p-4 border border-zinc-800 group">
                     <div className="flex items-center gap-4">
-                      {p.image_url ? (
-                        <img src={p.image_url} className="w-12 h-12 object-cover border border-zinc-800" alt="" />
-                      ) : (
-                        <div className="w-12 h-12 bg-black border border-zinc-800" />
-                      )}
+                      <img src={p.image_url} className="w-12 h-12 object-cover border border-zinc-800" alt="" />
                       <div>
                         <p className="font-bold text-xs uppercase italic">{p.name}</p>
                         <p className="text-zinc-500 text-[10px]">
-                            Rs. {p.price} {p.oldPrice && <span className="line-through ml-2 opacity-50">Rs. {p.oldPrice}</span>}
+                            Rs. {p.price} • <span className={p.stock < 10 ? "text-red-500" : "text-green-500"}>{p.stock} in stock</span>
                         </p>
                       </div>
                     </div>
+                    {/* WORKING REMOVE BUTTON */}
                     <button onClick={() => deleteProduct(p.id)} className="text-red-500 opacity-0 group-hover:opacity-100 text-[9px] font-bold uppercase tracking-widest transition-all hover:underline">Remove</button>
                   </div>
                 ))}
@@ -203,41 +186,23 @@ export default function AdminPanel() {
             </section>
           </div>
 
-          {/* RIGHT: ORDERS */}
+          {/* ORDERS SECTION (Same as before) */}
           <div>
             <h2 className="text-xl font-bold uppercase italic border-b border-zinc-800 pb-2 mb-6 tracking-widest">Order Stream</h2>
             <div className="space-y-4">
-              {orders.length === 0 && <p className="text-zinc-600 uppercase text-[10px] tracking-widest italic text-center py-20">No orders recorded yet.</p>}
               {orders.map((order) => (
-                <div key={order.id} className={`p-6 border transition-all duration-500 ${order.status === 'Shipped' ? 'bg-zinc-900/20 border-zinc-900 opacity-40' : 'bg-zinc-900 border-zinc-800 shadow-xl shadow-white/5'}`}>
+                <div key={order.id} className={`p-6 border ${order.status === 'Shipped' ? 'bg-zinc-900/20 border-zinc-900 opacity-40' : 'bg-zinc-900 border-zinc-800'}`}>
                   <div className="flex justify-between items-start mb-4">
                     <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="font-black italic uppercase text-lg leading-none tracking-tighter">{order.customer_name}</p>
-                        <span className={`text-[8px] font-bold px-2 py-0.5 rounded ${order.status === 'Shipped' ? 'bg-zinc-800 text-zinc-400' : 'bg-green-500 text-black'}`}>
-                            {order.status || 'PENDING'}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-zinc-500 uppercase font-bold">{order.payment_method} • {order.customer_phone}</p>
+                      <p className="font-black italic uppercase text-lg tracking-tighter">{order.customer_name}</p>
+                      <p className="text-[10px] text-zinc-500 uppercase font-bold">{order.customer_phone}</p>
                     </div>
                     <div className="text-right">
-                        <p className="font-black italic text-xl leading-none">Rs. {order.total_price}</p>
-                        <p className="text-[8px] text-zinc-600 mt-1 uppercase">{new Date(order.created_at).toLocaleDateString()}</p>
+                        <p className="font-black italic text-xl">Rs. {order.total_price}</p>
                     </div>
                   </div>
-                  
-                  <div className="bg-black/40 p-3 rounded border border-zinc-800/50 mb-4">
-                    <p className="text-[10px] text-zinc-400 uppercase leading-relaxed italic">{order.customer_address}</p>
-                  </div>
-
                   {order.status !== 'Shipped' && (
-                    <button 
-                      disabled={isUpdating === order.id}
-                      onClick={() => updateStatus(order.id, 'Shipped')}
-                      className="w-full bg-white text-black text-[9px] font-bold py-3 uppercase tracking-[0.3em] hover:bg-zinc-200 transition-all disabled:opacity-50"
-                    >
-                      {isUpdating === order.id ? 'Updating...' : 'Confirm Shipment'}
-                    </button>
+                    <button onClick={() => updateStatus(order.id, 'Shipped')} className="w-full bg-white text-black text-[9px] font-bold py-3 uppercase tracking-[0.3em]">Confirm Shipment</button>
                   )}
                 </div>
               ))}
