@@ -45,7 +45,7 @@ export default function Home() {
         {loading && (
           <div className="fixed inset-0 z-[100] flex">
             <motion.div initial={{ x: 0 }} exit={{ x: "-100%" }} transition={{ duration: 1, ease: [0.77, 0, 0.175, 1] }} className="h-full w-1/2 bg-black flex items-center justify-end">
-              <span className="text-white text-2xl md:text-4xl font-black italic pr-5 md:pr-6 z-[110] whitespace-nowrap">THE YASAR</span>
+              <span className="text-white text-2xl md:text-4xl font-black italic pr-5 md:pr-4 z-[110] whitespace-nowrap">THE YASAR</span>
             </motion.div>
             <motion.div initial={{ x: 0 }} exit={{ x: "100%" }} transition={{ duration: 1, ease: [0.77, 0, 0.175, 1] }} className="h-full w-1/2 bg-black flex items-center justify-start">
               <span className="text-white text-2xl md:text-4xl font-black italic pl-5 md:pl-7 z-[110] whitespace-nowrap">WAY</span>
