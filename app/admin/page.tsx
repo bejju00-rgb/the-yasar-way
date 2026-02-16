@@ -21,7 +21,6 @@ export default function AdminPanel() {
   const [stock, setStock] = useState(""); 
 
   const fetchData = async () => {
-    // FIXED: Changed 'created_at' to 'id' to resolve your console error
     const { data: prodData, error: prodError } = await supabase
       .from("products")
       .select("*")
@@ -49,27 +48,30 @@ export default function AdminPanel() {
     else alert("Access Denied.");
   };
 
-  // --- EMAILJS LOGIC ---
+  // --- EMAILJS LOGIC (FIXED WITH YOUR IDS) ---
   const sendStatusEmail = async (order: any, status: string) => {
-    const serviceId = process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!;
-    const publicKey = process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY!;
+    const serviceId = "service_uqpm74w"; // Your ID
+    const publicKey = "31ajJuFK8ia03HKZD"; // Your Key
     
+    // REPLACE THESE with your Template IDs from the EmailJS dashboard
     const templateId = status === "Shipped" 
-      ? process.env.NEXT_PUBLIC_EMAILJS_SHIPMENT_TEMPLATE_ID! 
-      : process.env.NEXT_PUBLIC_EMAILJS_DELIVERY_TEMPLATE_ID!;
+      ? "template_7x017r7" 
+      : "template_pbyba6g";
     
     const templateParams = {
       customer_name: order.customer_name,
-      customer_email: order.customer_email, // Make sure this column exists in Supabase
+      customer_email: order.customer_email, 
       order_id: order.id,
       status: status,
     };
 
+    console.log("Attempting email to:", order.customer_email);
+
     try {
       await emailjs.send(serviceId, templateId, templateParams, publicKey);
-      console.log(`${status} email sent!`);
+      console.log(`✅ ${status} email sent!`);
     } catch (err) {
-      console.error("Email failed:", err);
+      console.error("❌ Email failed:", err);
     }
   };
 
@@ -107,36 +109,43 @@ export default function AdminPanel() {
     }
   };
 
-  // UPDATED: Now handles Shipment -> Delivery flow + Email triggers
+  // --- UPDATED STATUS LOGIC (FIXED BAD REQUEST) ---
   const updateStatus = async (order: any, newStatus: string) => {
     setIsUpdating(order.id);
     
+    // 1. Update Order Status in Supabase
     const { error } = await supabase.from("orders").update({ status: newStatus }).eq("id", order.id);
     
     if (error) {
       alert("Update failed: " + error.message);
     } else {
-      // Increment sales only when first shipped
-      if (newStatus === "Shipped") {
+      // 2. Increment sales (Only if Shipped and product_id exists)
+      if (newStatus === "Shipped" && order.product_id) {
         const { data: product } = await supabase
           .from("products")
           .select("sales_count")
           .eq("id", order.product_id)
           .single();
 
-        await supabase
-          .from("products")
-          .update({ sales_count: (product?.sales_count || 0) + 1 })
-          .eq("id", order.product_id);
+        if (product) {
+          await supabase
+            .from("products")
+            .update({ sales_count: (product.sales_count || 0) + 1 })
+            .eq("id", order.product_id);
+        }
+      } else if (newStatus === "Shipped" && !order.product_id) {
+        console.warn("⚠️ No product_id found on this order. Sales count not updated.");
       }
 
-      // Automatically send the email
+      // 3. Automatically send the email
       await sendStatusEmail(order, newStatus);
     }
     
     await fetchData();
     setIsUpdating(null);
   };
+
+  // ... (Keep the rest of your return UI code exactly as it was)
 
   if (!isAuthenticated) {
     return (
