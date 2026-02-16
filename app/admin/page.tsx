@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import emailjs from '@emailjs/browser';
 
 export default function AdminPanel() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -12,7 +13,7 @@ export default function AdminPanel() {
 
   // Form State
   const [name, setName] = useState("");
-  const [description, setDescription] = useState(""); // ADDED DESCRIPTION STATE
+  const [description, setDescription] = useState(""); 
   const [price, setPrice] = useState("");
   const [oldPrice, setOldPrice] = useState(""); 
   const [imageUrl, setImageUrl] = useState("");
@@ -20,10 +21,11 @@ export default function AdminPanel() {
   const [stock, setStock] = useState(""); 
 
   const fetchData = async () => {
+    // FIXED: Changed 'created_at' to 'id' to resolve your console error
     const { data: prodData, error: prodError } = await supabase
       .from("products")
       .select("*")
-      .order('created_at', { ascending: false });
+      .order('id', { ascending: false });
     
     if (prodError) console.error("Product fetch error:", prodError.message);
     else setProducts(prodData || []);
@@ -47,7 +49,29 @@ export default function AdminPanel() {
     else alert("Access Denied.");
   };
 
-  const totalRevenue = orders.reduce((acc, curr) => acc + Number(curr.total_price), 0);
+  // --- EMAILJS LOGIC ---
+  const sendStatusEmail = async (order: any, status: string) => {
+    const serviceId = process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID!;
+    const publicKey = process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY!;
+    
+    const templateId = status === "Shipped" 
+      ? process.env.NEXT_PUBLIC_EMAILJS_SHIPMENT_TEMPLATE_ID! 
+      : process.env.NEXT_PUBLIC_EMAILJS_DELIVERY_TEMPLATE_ID!;
+    
+    const templateParams = {
+      customer_name: order.customer_name,
+      customer_email: order.customer_email, // Make sure this column exists in Supabase
+      order_id: order.id,
+      status: status,
+    };
+
+    try {
+      await emailjs.send(serviceId, templateId, templateParams, publicKey);
+      console.log(`${status} email sent!`);
+    } catch (err) {
+      console.error("Email failed:", err);
+    }
+  };
 
   const addProduct = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,11 +79,12 @@ export default function AdminPanel() {
     
     const productData: any = { 
       name, 
-      description, // ADDED TO DATABASE OBJECT
+      description,
       price: Number(price), 
       image_url: imageUrl, 
       oldPrice: Number(finalOldPrice),
-      tag
+      tag,
+      sales_count: 0 
     };
 
     if (stock) productData.stock = Number(stock);
@@ -69,7 +94,6 @@ export default function AdminPanel() {
     if (error) {
       alert("Failed to add: " + error.message);
     } else {
-      // RESET ALL FIELDS
       setName(""); setDescription(""); setPrice(""); setOldPrice(""); setImageUrl(""); setTag(""); setStock("");
       fetchData();
     }
@@ -83,31 +107,42 @@ export default function AdminPanel() {
     }
   };
 
-  const updateStatus = async (id: number, newStatus: string) => {
-    setIsUpdating(id);
-    const { error } = await supabase.from("orders").update({ status: newStatus }).eq("id", id);
-    if (error) alert("Update failed: " + error.message);
+  // UPDATED: Now handles Shipment -> Delivery flow + Email triggers
+  const updateStatus = async (order: any, newStatus: string) => {
+    setIsUpdating(order.id);
+    
+    const { error } = await supabase.from("orders").update({ status: newStatus }).eq("id", order.id);
+    
+    if (error) {
+      alert("Update failed: " + error.message);
+    } else {
+      // Increment sales only when first shipped
+      if (newStatus === "Shipped") {
+        const { data: product } = await supabase
+          .from("products")
+          .select("sales_count")
+          .eq("id", order.product_id)
+          .single();
+
+        await supabase
+          .from("products")
+          .update({ sales_count: (product?.sales_count || 0) + 1 })
+          .eq("id", order.product_id);
+      }
+
+      // Automatically send the email
+      await sendStatusEmail(order, newStatus);
+    }
+    
     await fetchData();
     setIsUpdating(null);
-  };
-
-  const downloadCSV = () => {
-    const headers = ["ID", "Customer", "Phone", "Address", "Method", "Total", "Status"];
-    const rows = orders.map(o => [o.id, o.customer_name, o.customer_phone, `"${o.customer_address}"`, o.payment_method, o.total_price, o.status || 'Pending']);
-    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `YasarWay_Orders.csv`;
-    link.click();
   };
 
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-6">
         <form onSubmit={handleLogin} className="w-full max-w-sm bg-zinc-900 p-8 border border-zinc-800">
-          <h1 className="text-2xl font-black italic uppercase text-white mb-6 tracking-tighter text-center text-white">HQ ACCESS</h1>
+          <h1 className="text-2xl font-black italic uppercase text-white mb-6 tracking-tighter text-center">HQ ACCESS</h1>
           <input type="password" placeholder="Master Password" className="w-full bg-black border border-zinc-700 p-4 text-white outline-none mb-4 focus:border-white transition-all text-center" value={password} onChange={(e) => setPassword(e.target.value)} />
           <button className="w-full bg-white text-black font-bold py-4 uppercase tracking-[0.3em] text-xs hover:bg-zinc-200 transition-all">Authorize</button>
         </form>
@@ -123,7 +158,6 @@ export default function AdminPanel() {
             <p className="text-zinc-500 text-[10px] uppercase tracking-[0.4em] mb-2">Internal Management</p>
             <h1 className="text-5xl font-black italic uppercase tracking-tighter">THE YASAR WAY</h1>
           </div>
-          <button onClick={downloadCSV} className="text-[10px] font-bold uppercase border border-zinc-700 px-6 py-3 hover:bg-white hover:text-black transition-all tracking-widest">Export Orders</button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
@@ -135,7 +169,6 @@ export default function AdminPanel() {
                     <label className="text-[9px] uppercase text-zinc-500 font-bold mb-1 block">Product Title</label>
                     <input value={name} onChange={(e) => setName(e.target.value)} className="w-full bg-black p-3 text-sm border border-zinc-800 outline-none focus:border-zinc-500 text-white" required />
                 </div>
-                {/* ADDED DESCRIPTION TEXTAREA */}
                 <div className="col-span-2">
                     <label className="text-[9px] uppercase text-zinc-500 font-bold mb-1 block">Description</label>
                     <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-black p-3 text-sm border border-zinc-800 outline-none focus:border-zinc-500 text-white h-24 resize-none" placeholder="Details about the product..." required />
@@ -167,7 +200,10 @@ export default function AdminPanel() {
                       <div>
                         <p className="font-bold text-xs uppercase italic text-white">{p.name}</p>
                         <p className="text-zinc-500 text-[10px] uppercase">
-                            Rs. {p.price} {p.stock !== undefined && `• ${p.stock} In Stock`}
+                            Rs. {p.price} • {p.stock || 0} In Stock
+                        </p>
+                        <p className="text-emerald-500 text-[9px] font-bold uppercase mt-1 tracking-tighter">
+                          {p.sales_count || 0} PIECES SOLD 
                         </p>
                       </div>
                     </div>
@@ -182,13 +218,40 @@ export default function AdminPanel() {
             <h2 className="text-xl font-bold uppercase italic border-b border-zinc-800 pb-2 mb-6 tracking-widest">Order Stream</h2>
             <div className="space-y-4">
               {orders.map((order) => (
-                <div key={order.id} className={`p-6 border ${order.status === 'Shipped' ? 'bg-zinc-900/20 border-zinc-900 opacity-40' : 'bg-zinc-900 border-zinc-800 shadow-xl'}`}>
+                <div key={order.id} className={`p-6 border ${order.status === 'Delivered' ? 'bg-zinc-900/20 border-zinc-900 opacity-40' : 'bg-zinc-900 border-zinc-800 shadow-xl'}`}>
                   <div className="flex justify-between items-start mb-4">
-                    <p className="font-black italic uppercase text-lg tracking-tighter text-white">{order.customer_name}</p>
+                    <div>
+                      <p className="font-black italic uppercase text-lg tracking-tighter text-white">{order.customer_name}</p>
+                      <p className="text-zinc-500 text-[9px] uppercase tracking-widest">{order.customer_address}</p>
+                    </div>
                     <p className="font-black italic text-xl text-white">Rs. {order.total_price}</p>
                   </div>
-                  {order.status !== 'Shipped' && (
-                    <button onClick={() => updateStatus(order.id, 'Shipped')} className="w-full bg-white text-black text-[9px] font-bold py-3 uppercase tracking-[0.3em] hover:invert transition-all">Confirm Shipment</button>
+                  
+                  {/* BUTTON TOGGLE LOGIC */}
+                  {(!order.status || order.status === 'Pending') && (
+                    <button 
+                      onClick={() => updateStatus(order, 'Shipped')} 
+                      disabled={isUpdating === order.id}
+                      className="w-full bg-white text-black text-[9px] font-bold py-3 uppercase tracking-[0.3em] hover:invert transition-all"
+                    >
+                      {isUpdating === order.id ? 'Processing...' : 'Confirm Shipment'}
+                    </button>
+                  )}
+
+                  {order.status === 'Shipped' && (
+                    <button 
+                      onClick={() => updateStatus(order, 'Delivered')} 
+                      disabled={isUpdating === order.id}
+                      className="w-full bg-emerald-500 text-black text-[9px] font-bold py-3 uppercase tracking-[0.3em] hover:bg-emerald-400 transition-all"
+                    >
+                      {isUpdating === order.id ? 'Processing...' : 'Confirm Delivered'}
+                    </button>
+                  )}
+
+                  {order.status === 'Delivered' && (
+                    <div className="text-center py-2 border border-zinc-800 text-[8px] uppercase tracking-widest text-zinc-500">
+                      Order Fulfilled
+                    </div>
                   )}
                 </div>
               ))}
