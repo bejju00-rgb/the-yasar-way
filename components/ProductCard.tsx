@@ -12,13 +12,23 @@ const countryConfig = {
   AE: { label: "UAE", currency: "AED", rate: 0.013, locale: "ar-AE" },
 };
 
-export default function ProductCard({ product }: { product: any }) {
+// FIX: Added 'config' and 'onOpenModal' to the props definition
+export default function ProductCard({ 
+  product, 
+  config, 
+  onOpenModal 
+}: { 
+  product: any; 
+  config: any; 
+  onOpenModal: (product: any) => void 
+}) {
   const router = useRouter();
   const { addToCart, clearCart } = useCartStore();
   
-  // Assuming PK as default to match your detail page
-  const [activeCountry] = useState<keyof typeof countryConfig>("PK");
-  const config = countryConfig[activeCountry];
+  // Uses the config passed from the Home page for perfect synchronization
+  const activeCountry = (Object.keys(countryConfig).find(
+    (key) => countryConfig[key as keyof typeof countryConfig].currency === config.currency
+  ) as keyof typeof countryConfig) || "PK";
 
   const formatPrice = (price: number) => {
     return (price * config.rate).toLocaleString(config.locale, {
@@ -28,32 +38,32 @@ export default function ProductCard({ product }: { product: any }) {
   };
 
   const handleDirectCheckout = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevents navigating to detail page if clicking the button
+    e.stopPropagation(); 
     clearCart();
     addToCart({ ...product });
     router.push("/checkout");
   };
 
   const handleAddToCart = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevents navigating to detail page
+    e.stopPropagation(); 
     addToCart({ ...product });
   };
 
   return (
     <motion.div 
       whileHover={{ y: -10 }}
-      onClick={() => router.push(`/product/${product.id}`)}
+      // FIX: Now uses onOpenModal to trigger the popup on the Home Page
+      onClick={() => onOpenModal(product)}
       className="group cursor-pointer bg-white rounded-[40px] p-4 border border-zinc-100 shadow-sm hover:shadow-2xl transition-all duration-500"
     >
       {/* IMAGE SECTION */}
       <div className="relative aspect-[4/5] rounded-[30px] overflow-hidden bg-zinc-50 mb-6">
-        // Inside your ProductCard component, find the main tag
-            <img 
-            src={product.image_url} 
-            alt={product.name}
-            className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700"
-            style={{ transform: 'translate3d(0,0,0)' }} // <--- ADD THIS LINE
-            />
+        <img 
+          src={product.image_url} 
+          alt={product.name} 
+          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" 
+          style={{ transform: 'translate3d(0,0,0)' }} // Mac/Safari rendering fix
+        />
         
         {/* QUICK ACTIONS OVERLAY */}
         <div className="absolute inset-x-4 bottom-4 flex gap-2 translate-y-12 group-hover:translate-y-0 transition-transform duration-500">
