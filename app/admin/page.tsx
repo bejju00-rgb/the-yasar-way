@@ -1,271 +1,229 @@
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import emailjs from '@emailjs/browser';
+import emailjs from "@emailjs/browser"; // RESTORED
 
 export default function AdminPanel() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [password, setPassword] = useState("");
-  
   const [products, setProducts] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
-  const [isUpdating, setIsUpdating] = useState<number | null>(null);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [offers, setOffers] = useState<any[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [tempImageUrl, setTempImageUrl] = useState("");
 
-  // Form State
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState(""); 
-  const [price, setPrice] = useState("");
-  const [oldPrice, setOldPrice] = useState(""); 
-  const [imageUrl, setImageUrl] = useState("");
-  const [tag, setTag] = useState("");
-  const [stock, setStock] = useState(""); 
+  // Form States
+  const [prodName, setProdName] = useState("");
+  const [prodPrice, setProdPrice] = useState("");
+  const [prodOldPrice, setProdOldPrice] = useState("");
+  const [prodDesc, setProdDesc] = useState(""); 
+  const [prodStockCount, setProdStockCount] = useState<number>(0);
+  const [categoryId, setCategoryId] = useState("");
+  const [catName, setCatName] = useState("");
+  const [catSlug, setCatSlug] = useState("");
+  const [offerTitle, setOfferTitle] = useState("");
 
   const fetchData = async () => {
-    const { data: prodData, error: prodError } = await supabase
-      .from("products")
-      .select("*")
-      .order('id', { ascending: false });
+    const { data: prodData } = await supabase.from("products").select("*, categories(name)").order('id', { ascending: false });
+    const { data: ordData } = await supabase.from("orders").select("*").order('created_at', { ascending: false });
+    const { data: catData } = await supabase.from("categories").select("*").order('name', { ascending: true });
+    const { data: offData } = await supabase.from("offers").select("*").order('id', { ascending: false });
     
-    if (prodError) console.error("Product fetch error:", prodError.message);
-    else setProducts(prodData || []);
-
-    const { data: ordData, error: ordError } = await supabase
-      .from("orders")
-      .select("*")
-      .order('created_at', { ascending: false });
-    
-    if (ordError) console.error("Order fetch error:", ordError.message);
-    else setOrders(ordData || []);
+    setProducts(prodData || []);
+    setOrders(ordData || []);
+    setCategories(catData || []);
+    setOffers(offData || []);
   };
 
   useEffect(() => {
     if (isAuthenticated) fetchData();
   }, [isAuthenticated]);
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (password === "YASAR786") setIsAuthenticated(true);
-    else alert("Access Denied.");
-  };
-
-  // --- EMAILJS LOGIC (FIXED WITH YOUR IDS) ---
-  const sendStatusEmail = async (order: any, status: string) => {
-    const serviceId = "service_uqpm74w"; // Your ID
-    const publicKey = "31ajJuFK8ia03HKZD"; // Your Key
+  // FULL EMAILJS LOGIC RESTORED
+  const updateOrderStatus = async (order: any) => {
+    if (!order || !order.id) return;
+    let nextStatus = order.status === "Pending" ? "Shipped" : order.status === "Shipped" ? "Delivered" : "Delivered";
     
-    // REPLACE THESE with your Template IDs from the EmailJS dashboard
-    const templateId = status === "Shipped" 
-      ? "template_7x017r7" 
-      : "template_pbyba6g";
+    const { error: updateError } = await supabase.from("orders").update({ status: nextStatus }).eq("id", order.id);
     
-    const templateParams = {
-      customer_name: order.customer_name,
-      customer_email: order.customer_email, 
-      order_id: order.id,
-      status: status,
-    };
-
-    console.log("Attempting email to:", order.customer_email);
-
-    try {
-      await emailjs.send(serviceId, templateId, templateParams, publicKey);
-      console.log(`✅ ${status} email sent!`);
-    } catch (err) {
-      console.error("❌ Email failed:", err);
-    }
-  };
-
-  const addProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const finalOldPrice = oldPrice ? Number(oldPrice) : (Number(price) * 1.2).toFixed(0);
-    
-    const productData: any = { 
-      name, 
-      description,
-      price: Number(price), 
-      image_url: imageUrl, 
-      oldPrice: Number(finalOldPrice),
-      tag,
-      sales_count: 0 
-    };
-
-    if (stock) productData.stock = Number(stock);
-
-    const { error } = await supabase.from("products").insert([productData]);
-    
-    if (error) {
-      alert("Failed to add: " + error.message);
-    } else {
-      setName(""); setDescription(""); setPrice(""); setOldPrice(""); setImageUrl(""); setTag(""); setStock("");
-      fetchData();
-    }
-  };
-
-  const deleteProduct = async (id: number) => {
-    if(confirm("Permanently remove this item from catalog?")) {
-      const { error } = await supabase.from("products").delete().eq("id", id);
-      if (error) alert("Delete failed: " + error.message);
-      fetchData();
-    }
-  };
-
-  // --- UPDATED STATUS LOGIC (FIXED BAD REQUEST) ---
-  const updateStatus = async (order: any, newStatus: string) => {
-    setIsUpdating(order.id);
-    
-    // 1. Update Order Status in Supabase
-    const { error } = await supabase.from("orders").update({ status: newStatus }).eq("id", order.id);
-    
-    if (error) {
-      alert("Update failed: " + error.message);
-    } else {
-      // 2. Increment sales (Only if Shipped and product_id exists)
-      if (newStatus === "Shipped" && order.product_id) {
-        const { data: product } = await supabase
-          .from("products")
-          .select("sales_count")
-          .eq("id", order.product_id)
-          .single();
-
-        if (product) {
-          await supabase
-            .from("products")
-            .update({ sales_count: (product.sales_count || 0) + 1 })
-            .eq("id", order.product_id);
+    if (!updateError) {
+      if (order.customer_email && order.customer_email.includes('@')) {
+        const templateParams = {
+          customer_name: order.customer_name || "Valued Customer",
+          customer_email: order.customer_email,
+          order_id: order.id,
+          status: nextStatus,
+          total_price: `${order.currency || 'Rs.'} ${order.total_price}`,
+        };
+        
+        try {
+          await emailjs.send(
+            "service_uqpm74w", 
+            nextStatus === "Shipped" ? "template_7x017r7" : "template_pbyba6g",
+            templateParams,
+            "31ajJuFK8ia03HKZD"
+          );
+          console.log("Email Dispatched successfully.");
+        } catch (err) { 
+          console.error("EmailJS Error:", err); 
         }
-      } else if (newStatus === "Shipped" && !order.product_id) {
-        console.warn("⚠️ No product_id found on this order. Sales count not updated.");
       }
-
-      // 3. Automatically send the email
-      await sendStatusEmail(order, newStatus);
+      fetchData();
     }
-    
-    await fetchData();
-    setIsUpdating(null);
   };
 
-  // ... (Keep the rest of your return UI code exactly as it was)
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    const fileName = `${Date.now()}-${file.name}`;
+    const { error: uploadError } = await supabase.storage.from('product-images').upload(fileName, file);
+    if (uploadError) { alert(uploadError.message); setIsUploading(false); return; }
+    const { data: { publicUrl } } = supabase.storage.from('product-images').getPublicUrl(fileName);
+    setTempImageUrl(publicUrl);
+    setIsUploading(false);
+  };
+
+  const deleteItem = async (table: string, id: number) => {
+    if(confirm("PERMANENTLY DELETE?")) { 
+      await supabase.from(table).delete().eq("id", id); 
+      fetchData(); 
+    }
+  };
 
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-6">
-        <form onSubmit={handleLogin} className="w-full max-w-sm bg-zinc-900 p-8 border border-zinc-800">
-          <h1 className="text-2xl font-black italic uppercase text-white mb-6 tracking-tighter text-center">HQ ACCESS</h1>
-          <input type="password" placeholder="Master Password" className="w-full bg-black border border-zinc-700 p-4 text-white outline-none mb-4 focus:border-white transition-all text-center" value={password} onChange={(e) => setPassword(e.target.value)} />
-          <button className="w-full bg-white text-black font-bold py-4 uppercase tracking-[0.3em] text-xs hover:bg-zinc-200 transition-all">Authorize</button>
+        <form onSubmit={(e) => { e.preventDefault(); if (password === "YASAR786") setIsAuthenticated(true); }} className="w-full max-w-sm bg-zinc-900 border border-zinc-800 p-10 rounded-[40px]">
+          <h1 className="text-xl font-black text-white mb-6 text-center tracking-tight uppercase italic">Terminal Auth</h1>
+          <input type="password" placeholder="ENCRYPTED KEY" className="w-full bg-black border border-zinc-700 p-4 text-white outline-none mb-4 rounded-xl text-center font-black" onChange={(e) => setPassword(e.target.value)} />
+          <button className="w-full bg-white text-black font-black py-4 rounded-xl uppercase text-[10px] tracking-widest hover:bg-emerald-500">LOGIN</button>
         </form>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black text-white p-6 md:p-12 font-sans">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-4 border-b border-zinc-800 pb-8">
-          <div>
-            <p className="text-zinc-500 text-[10px] uppercase tracking-[0.4em] mb-2">Internal Management</p>
-            <h1 className="text-5xl font-black italic uppercase tracking-tighter">THE YASAR WAY</h1>
-          </div>
-        </div>
+    <div className="min-h-screen bg-[#050505] text-white p-6 md:p-12">
+      <div className="max-w-7xl mx-auto">
+        <header className="mb-12 flex justify-between items-center border-b border-zinc-900 pb-8">
+          <h1 className="text-4xl font-black italic uppercase tracking-tighter">Admin Panel</h1>
+          <button onClick={() => setIsAuthenticated(false)} className="text-[10px] font-black uppercase border border-zinc-800 px-6 py-2 rounded-full">Logout</button>
+        </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
-          <div className="space-y-12">
-            <section>
-              <h2 className="text-xl font-bold uppercase italic border-b border-zinc-800 pb-2 mb-6 tracking-widest">Inventory Management</h2>
-              <form onSubmit={addProduct} className="grid grid-cols-2 gap-3 bg-zinc-900/30 p-6 border border-zinc-800">
-                <div className="col-span-2">
-                    <label className="text-[9px] uppercase text-zinc-500 font-bold mb-1 block">Product Title</label>
-                    <input value={name} onChange={(e) => setName(e.target.value)} className="w-full bg-black p-3 text-sm border border-zinc-800 outline-none focus:border-zinc-500 text-white" required />
-                </div>
-                <div className="col-span-2">
-                    <label className="text-[9px] uppercase text-zinc-500 font-bold mb-1 block">Description</label>
-                    <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-black p-3 text-sm border border-zinc-800 outline-none focus:border-zinc-500 text-white h-24 resize-none" placeholder="Details about the product..." required />
-                </div>
-                <div>
-                    <label className="text-[9px] uppercase text-zinc-500 font-bold mb-1 block">Price</label>
-                    <input value={price} onChange={(e) => setPrice(e.target.value)} type="number" className="w-full bg-black p-3 text-sm border border-zinc-800 outline-none focus:border-zinc-500 text-white" required />
-                </div>
-                <div>
-                    <label className="text-[9px] uppercase text-zinc-500 font-bold mb-1 block">Stock Quantity</label>
-                    <input value={stock} onChange={(e) => setStock(e.target.value)} type="number" className="w-full bg-black p-3 text-sm border border-zinc-800 outline-none focus:border-zinc-500 text-white" placeholder="0" />
-                </div>
-                <div className="col-span-2">
-                    <label className="text-[9px] uppercase text-zinc-500 font-bold mb-1 block">Image URL</label>
-                    <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className="w-full bg-black p-3 text-sm border border-zinc-800 outline-none focus:border-zinc-500 text-white" />
-                </div>
-                <button className="col-span-2 bg-white text-black font-bold py-4 uppercase text-[10px] tracking-[0.3em] mt-2 hover:invert transition-all">Update Digital Catalog</button>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          {/* COL 1: CATS & BANNERS */}
+          <div className="space-y-8">
+            <section className="bg-zinc-900/40 p-6 border border-zinc-800/50 rounded-[35px]">
+              <h3 className="text-[10px] font-black uppercase text-emerald-500 mb-4 tracking-widest">Collections</h3>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                await supabase.from("categories").insert([{ name: catName, slug: catSlug.toLowerCase(), image_url: tempImageUrl }]);
+                setCatName(""); setCatSlug(""); setTempImageUrl(""); fetchData();
+              }} className="space-y-3 mb-6">
+                <input placeholder="Name" value={catName} onChange={(e) => setCatName(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 rounded-lg text-xs" required />
+                <input placeholder="Slug" value={catSlug} onChange={(e) => setCatSlug(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 rounded-lg text-xs" required />
+                <input type="file" onChange={handleFileUpload} className="text-[8px]" />
+                <button className="w-full bg-white text-black font-black py-3 rounded-lg text-[9px] uppercase">Add Collection</button>
               </form>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {categories.map(c => (
+                  <div key={c.id} className="flex justify-between items-center bg-black/40 p-3 rounded-xl border border-zinc-800/50">
+                    <span className="text-[9px] font-black uppercase italic">{c.name}</span>
+                    <button onClick={() => deleteItem('categories', c.id)} className="text-red-500">&times;</button>
+                  </div>
+                ))}
+              </div>
             </section>
 
-            <section>
-              <h2 className="text-xl font-bold uppercase italic border-b border-zinc-800 pb-2 mb-6 tracking-widest">Live Catalog</h2>
-              <div className="grid grid-cols-1 gap-2 max-h-[500px] overflow-y-auto pr-2">
-                {products.length === 0 && <p className="text-zinc-600 uppercase text-[9px] tracking-widest italic">No products found.</p>}
-                {products.map(p => (
-                  <div key={p.id} className="flex justify-between items-center bg-zinc-900/40 p-4 border border-zinc-800 group">
-                    <div className="flex items-center gap-4">
-                      <img src={p.image_url || 'https://via.placeholder.com/50'} className="w-12 h-12 object-cover border border-zinc-800" alt="" />
-                      <div>
-                        <p className="font-bold text-xs uppercase italic text-white">{p.name}</p>
-                        <p className="text-zinc-500 text-[10px] uppercase">
-                            Rs. {p.price} • {p.stock || 0} In Stock
-                        </p>
-                        <p className="text-emerald-500 text-[9px] font-bold uppercase mt-1 tracking-tighter">
-                          {p.sales_count || 0} PIECES SOLD 
-                        </p>
-                      </div>
-                    </div>
-                    <button onClick={() => deleteProduct(p.id)} className="text-red-500 opacity-0 group-hover:opacity-100 text-[9px] font-bold uppercase tracking-widest transition-all hover:underline">Remove</button>
+            <section className="bg-zinc-900/40 p-6 border border-zinc-800/50 rounded-[35px]">
+              <h3 className="text-[10px] font-black uppercase text-orange-500 mb-4 tracking-widest">Banners</h3>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                await supabase.from("offers").insert([{ title: offerTitle, image_url: tempImageUrl, is_active: true }]);
+                setOfferTitle(""); setTempImageUrl(""); fetchData();
+              }} className="space-y-3 mb-6">
+                <input placeholder="Title" value={offerTitle} onChange={(e) => setOfferTitle(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 rounded-lg text-xs" required />
+                <input type="file" onChange={handleFileUpload} className="text-[8px]" />
+                <button className="w-full bg-orange-500 text-black font-black py-3 rounded-lg text-[9px] uppercase">Deploy</button>
+              </form>
+              <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto">
+                {offers.map(o => (
+                  <div key={o.id} className="relative aspect-[21/9] rounded-xl overflow-hidden border border-zinc-800">
+                    <img src={o.image_url} className="w-full h-full object-cover opacity-60" />
+                    <button onClick={() => deleteItem('offers', o.id)} className="absolute top-1 right-1 bg-red-500 text-[8px] p-1 rounded-full">&times;</button>
                   </div>
                 ))}
               </div>
             </section>
           </div>
 
-          <div>
-            <h2 className="text-xl font-bold uppercase italic border-b border-zinc-800 pb-2 mb-6 tracking-widest">Order Stream</h2>
-            <div className="space-y-4">
-              {orders.map((order) => (
-                <div key={order.id} className={`p-6 border ${order.status === 'Delivered' ? 'bg-zinc-900/20 border-zinc-900 opacity-40' : 'bg-zinc-900 border-zinc-800 shadow-xl'}`}>
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <p className="font-black italic uppercase text-lg tracking-tighter text-white">{order.customer_name}</p>
-                      <p className="text-zinc-500 text-[9px] uppercase tracking-widest">{order.customer_address}</p>
-                    </div>
-                    <p className="font-black italic text-xl text-white">Rs. {order.total_price}</p>
-                  </div>
-                  
-                  {/* BUTTON TOGGLE LOGIC */}
-                  {(!order.status || order.status === 'Pending') && (
-                    <button 
-                      onClick={() => updateStatus(order, 'Shipped')} 
-                      disabled={isUpdating === order.id}
-                      className="w-full bg-white text-black text-[9px] font-bold py-3 uppercase tracking-[0.3em] hover:invert transition-all"
-                    >
-                      {isUpdating === order.id ? 'Processing...' : 'Confirm Shipment'}
-                    </button>
-                  )}
-
-                  {order.status === 'Shipped' && (
-                    <button 
-                      onClick={() => updateStatus(order, 'Delivered')} 
-                      disabled={isUpdating === order.id}
-                      className="w-full bg-emerald-500 text-black text-[9px] font-bold py-3 uppercase tracking-[0.3em] hover:bg-emerald-400 transition-all"
-                    >
-                      {isUpdating === order.id ? 'Processing...' : 'Confirm Delivered'}
-                    </button>
-                  )}
-
-                  {order.status === 'Delivered' && (
-                    <div className="text-center py-2 border border-zinc-800 text-[8px] uppercase tracking-widest text-zinc-500">
-                      Order Fulfilled
-                    </div>
-                  )}
+          {/* COL 2: PRODUCTS */}
+          <div className="space-y-8">
+            <section className="bg-zinc-900/40 p-6 border border-zinc-800/50 rounded-[35px]">
+              <h3 className="text-[10px] font-black uppercase text-white mb-4 tracking-widest">Product Deployment</h3>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                await supabase.from("products").insert([{ 
+                  name: prodName, price: Number(prodPrice), old_price: prodOldPrice ? Number(prodOldPrice) : null,
+                  description: prodDesc, stock_count: prodStockCount, is_in_stock: prodStockCount > 0,
+                  image_url: tempImageUrl, category_id: categoryId ? Number(categoryId) : null 
+                }]);
+                setProdName(""); setProdPrice(""); setProdOldPrice(""); setProdDesc(""); setProdStockCount(0); setTempImageUrl(""); fetchData();
+              }} className="space-y-4 mb-6">
+                <input placeholder="Name" value={prodName} onChange={(e) => setProdName(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 rounded-lg text-xs" required />
+                <div className="grid grid-cols-2 gap-2">
+                  <input placeholder="Price" type="number" value={prodPrice} onChange={(e) => setProdPrice(e.target.value)} className="bg-black border border-zinc-800 p-3 rounded-lg text-xs" required />
+                  <input placeholder="Qty" type="number" value={prodStockCount} onChange={(e) => setProdStockCount(Number(e.target.value))} className="bg-black border border-zinc-800 p-3 rounded-lg text-xs" required />
                 </div>
-              ))}
-            </div>
+                <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 rounded-lg text-[9px] uppercase">
+                  <option value="">Category</option>
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                <input type="file" onChange={handleFileUpload} className="text-[8px]" />
+                <button disabled={isUploading} className="w-full bg-emerald-500 text-black font-black py-4 rounded-xl text-[10px] uppercase">Add product</button>
+              </form>
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+                {products.map(p => (
+                  <div key={p.id} className="bg-black/40 border border-zinc-800 p-3 rounded-xl flex justify-between items-center group">
+                    <div className="flex items-center gap-3">
+                        <img src={p.image_url} className="w-8 h-8 rounded object-cover grayscale group-hover:grayscale-0" />
+                        <span className="text-[9px] font-black uppercase italic leading-none">{p.name}</span>
+                    </div>
+                    <button onClick={() => deleteItem('products', p.id)} className="text-[8px] font-black text-red-500">Remove</button>
+                  </div>
+                ))}
+              </div>
+            </section>
           </div>
+
+          {/* COL 3: ORDERS & EMAIL TRIGGER */}
+          <div className="space-y-6">
+             <h3 className="text-zinc-600 font-black uppercase tracking-[0.5em] text-[10px] pl-4">Orders</h3>
+             <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-2">
+               {orders.map(order => (
+                 <div key={order.id} className="p-6 bg-zinc-900 border border-zinc-800 rounded-[35px]">
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <span className="block font-black text-white uppercase italic text-sm">{order.customer_name}</span>
+                        <span className="text-[8px] text-zinc-500 uppercase">{order.customer_phone}</span>
+                      </div>
+                      {/* EMAIL TRIGGER ON STATUS CHANGE */}
+                      <button onClick={() => updateOrderStatus(order)} className={`text-[8px] font-black px-4 py-2 rounded-full border transition-all ${order.status === 'Delivered' ? 'bg-emerald-500 text-black border-emerald-500' : 'text-zinc-400 border-zinc-700'}`}>
+                        {order.status || 'Pending'}
+                      </button>
+                    </div>
+                    <div className="flex justify-between items-center border-t border-zinc-800 pt-4">
+                      <span className="font-black text-emerald-400 text-sm italic">Rs. {order.total_price}</span>
+                      <button onClick={() => deleteItem('orders', order.id)} className="text-[8px] font-black text-zinc-700 hover:text-red-500">Archive</button>
+                    </div>
+                 </div>
+               ))}
+             </div>
+          </div>
+
         </div>
       </div>
     </div>

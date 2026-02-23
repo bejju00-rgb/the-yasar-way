@@ -4,48 +4,57 @@ import { useCartStore } from "@/data/cartStore";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 
+const countryConfig = {
+  PK: { label: "Pakistan", currency: "Rs.", rate: 1, locale: "en-PK" },
+  US: { label: "United States", currency: "$", rate: 0.0036, locale: "en-US" },
+  GB: { label: "United Kingdom", currency: "£", rate: 0.0028, locale: "en-GB" },
+  EU: { label: "Europe", currency: "€", rate: 0.0033, locale: "de-DE" },
+  AE: { label: "UAE", currency: "AED", rate: 0.013, locale: "ar-AE" },
+  CA: { label: "Canada", currency: "C$", rate: 0.0048, locale: "en-CA" },
+};
+
+const paymentDetails: any = {
+  JazzCash: { title: "JazzCash", account: "03285900914", name: "Yasar Way Store" },
+  EasyPaisa: { title: "EasyPaisa", account: "03285900914", name: "Yasar Way Store" },
+  Bank: { title: "Bank Transfer", account: "PK00 MEZN 0000 1234 5678", name: "Meezan Bank Ltd" },
+  COD: { title: "Cash on Delivery" }
+};
+
 export default function CheckoutPage() {
   const { cart, removeFromCart, clearCart } = useCartStore();
   const [isOrdering, setIsOrdering] = useState(false);
   const [orderComplete, setOrderComplete] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("COD");
-  
-  // State for shipping
+  const [activeCountry, setActiveCountry] = useState<keyof typeof countryConfig>("PK");
+  const config = countryConfig[activeCountry];
   const [selectedCity, setSelectedCity] = useState("");
   const [shippingFee, setShippingFee] = useState(0);
 
-  // Shipping Logic
-  const calculateShipping = (city: string) => {
-    const local = ["Karachi"];
-    const zoneA = ["Lahore", "Islamabad", "Faisalabad", "Rawalpindi", "Sialkot"];
-
-    if (!city) return 0;
-    if (local.includes(city)) return 200;
-    if (zoneA.includes(city)) return 350;
-    return 500; // All other regions (TCS Zone B/C)
+  const formatPrice = (price: number) => {
+    const converted = price * config.rate;
+    return converted.toLocaleString(config.locale, {
+      minimumFractionDigits: activeCountry === "PK" ? 0 : 2,
+      maximumFractionDigits: 2
+    });
   };
 
-  // Update shipping fee whenever city changes
   useEffect(() => {
-    setShippingFee(calculateShipping(selectedCity));
-  }, [selectedCity]);
+    const fee = activeCountry !== "PK" ? 2500 : 199;
+    setShippingFee(selectedCity ? fee : 0);
+  }, [selectedCity, activeCountry]);
 
   const subtotal = cart.reduce((acc, item: any) => {
-    const price = typeof item.price === 'string' 
-      ? parseInt(item.price.replace(/[^0-9]/g, '')) 
-      : (typeof item.price === 'number' ? item.price : 0);
+    const price = typeof item.price === 'string' ? parseFloat(item.price.replace(/[^0-9.]/g, '')) : (item.price || 0);
     return acc + (price * (item.quantity || 1));
   }, 0);
 
-  // Final total including shipping
-  const finalTotal = subtotal + shippingFee;
+  const discount = (paymentMethod !== "COD" && activeCountry === "PK") ? 400 : 0;
+  const finalTotal = subtotal + shippingFee - discount;
 
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCity) return alert("Please select a city for delivery.");
-    
+    if (cart.length === 0) return alert("BAG EMPTY");
     setIsOrdering(true);
-
     const formData = new FormData(e.target as HTMLFormElement);
     const orderData = {
       customer_name: formData.get("name"),
@@ -54,150 +63,148 @@ export default function CheckoutPage() {
       customer_address: `${selectedCity} - ${formData.get("address")}`,
       payment_method: paymentMethod,
       total_price: finalTotal,
-      items: cart,
+      currency: config.currency,
+      items: cart, 
       status: 'Pending'
     };
-
     const { error } = await supabase.from("orders").insert([orderData]);
-
-    if (!error) {
-      const itemDetails = cart.map((i: any) => `- ${i.name} (Rs. ${i.price})`).join('%0A');
-      const message = `*THE YASAR WAY - NEW ORDER*%0A%0A*Customer:* ${orderData.customer_name}%0A*City:* ${selectedCity}%0A*Phone:* ${orderData.customer_phone}%0A*Address:* ${formData.get("address")}%0A*Method:* ${paymentMethod}%0A%0A*Items:*%0A${itemDetails}%0A%0A*Subtotal:* Rs. ${subtotal}%0A*Shipping (TCS):* Rs. ${shippingFee}%0A*TOTAL:* Rs. ${finalTotal}`;
-      
-      const whatsappNumber = "923247875183"; 
-      const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${message}`;
-      
-      setOrderComplete(true);
-      clearCart();
-
-      // SAFARI/iOS FIX: Use window.location.href instead of window.open
-      // Wrapped in a small timeout to ensure the "Order Placed" state renders first
-      setTimeout(() => {
-        window.location.href = whatsappUrl;
-      }, 300);
-
-    } else {
-      alert("Something went wrong: " + error.message);
-    }
+    if (!error) { setOrderComplete(true); clearCart(); } else { alert("Error: " + error.message); }
     setIsOrdering(false);
   };
 
   if (orderComplete) return (
     <div className="min-h-screen flex flex-col items-center justify-center text-center p-6 bg-white">
-      <div className="w-20 h-20 bg-black rounded-full flex items-center justify-center mb-6">
-        <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7"></path></svg>
-      </div>
-      <h1 className="text-4xl font-black italic uppercase tracking-tighter">Order Placed</h1>
-      <p className="mt-4 text-zinc-500 uppercase tracking-widest text-[10px] max-w-xs">Connecting to WhatsApp for confirmation...</p>
-      <Link href="/" className="mt-10 border-b-2 border-black font-bold text-xs uppercase italic pb-1">Back to Shop</Link>
+      <h1 className="text-3xl font-bold mb-4">Thank you for your purchase!</h1>
+      <p className="text-zinc-500 mb-8">Order received. We will contact you on WhatsApp shortly.</p>
+      <Link href="/" className="bg-[#1773b0] text-white px-8 py-4 rounded-md font-bold">Continue Shopping</Link>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-white text-black p-4 md:p-12 font-sans">
-      <div className="max-w-6xl mx-auto">
-        <Link href="/" className="text-[10px] font-bold tracking-widest uppercase hover:text-zinc-400">← Return to Collection</Link>
+    <div className="min-h-screen bg-white">
+      <div className="max-w-[1100px] mx-auto flex flex-col lg:flex-row">
         
-        {cart.length === 0 ? (
-          <div className="py-24 text-center">
-            <h2 className="text-2xl font-black italic uppercase mb-4">Your bag is empty</h2>
-            <Link href="/" className="inline-block bg-black text-white px-10 py-4 font-bold text-[10px] tracking-widest uppercase">Shop Now</Link>
-          </div>
-        ) : (
-          <div className="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-16">
-            <div>
-              <h2 className="text-2xl font-black italic uppercase tracking-tighter mb-8 border-b-4 border-black inline-block">Shipping</h2>
-              <form id="checkout-form" onSubmit={handlePlaceOrder} className="space-y-4">
-                <input name="name" placeholder="Full Name" className="w-full border-2 border-zinc-100 p-4 outline-none focus:border-black transition-all bg-zinc-50/50" required />
-                <input name="email" type="email" placeholder="Gmail Address" className="w-full border-2 border-zinc-100 p-4 outline-none focus:border-black transition-all bg-zinc-50/50" required />
-                <input name="phone" placeholder="WhatsApp Number" className="w-full border-2 border-zinc-100 p-4 outline-none focus:border-black transition-all bg-zinc-50/50" required />
-                
-                <select 
-                  required
-                  value={selectedCity}
-                  onChange={(e) => setSelectedCity(e.target.value)}
-                  className="w-full border-2 border-zinc-100 p-4 outline-none focus:border-black transition-all bg-zinc-50/50 text-[10px] font-bold uppercase tracking-widest"
-                >
-                  <option value="">Select City (For TCS Rates)</option>
-                  <option value="Karachi">Karachi</option>
-                  <option value="Lahore">Lahore</option>
-                  <option value="Islamabad">Islamabad</option>
-                  <option value="Faisalabad">Faisalabad</option>
-                  <option value="Rawalpindi">Rawalpindi</option>
-                  <option value="Sialkot">Sialkot</option>
-                  <option value="Abbottabad">Abbottabad</option>
-                  <option value="Peshawar">Peshawar</option>
-                  <option value="Multan">Multan</option>
-                  <option value="Quetta">Quetta</option>
-                  <option value="Gujranwala">Gujranwala</option>
-                  <option value="Other">Other Regions (Pakistan)</option>
-                </select>
-
-                <textarea name="address" placeholder="House #, Street, Area Name" className="w-full border-2 border-zinc-100 p-4 outline-none focus:border-black transition-all bg-zinc-50/50" rows={4} required />
-              </form>
-
-              <div className="mt-12">
-                <h2 className="text-2xl font-black italic uppercase tracking-tighter mb-8 border-b-4 border-black inline-block">Payment</h2>
-                <div className="grid grid-cols-3 gap-3">
-                  {['COD', 'JazzCash', 'NayaPay'].map((method) => (
-                    <button 
-                      key={method}
-                      type="button"
-                      onClick={() => setPaymentMethod(method)}
-                      className={`py-4 border-2 font-bold text-[10px] tracking-widest uppercase transition-all ${paymentMethod === method ? 'bg-black text-white border-black' : 'border-zinc-100 text-zinc-400 hover:border-zinc-300'}`}
-                    >
-                      {method}
-                    </button>
-                  ))}
-                </div>
-              </div>
+        {/* LEFT SIDE: Form */}
+        <div className="flex-[1.2] p-6 md:p-12 lg:border-r border-zinc-200">
+          <header className="mb-8">
+            <h1 className="text-xl font-bold tracking-tight mb-8">the-yasar-way</h1>
+            <div className="flex gap-2 text-[11px] text-zinc-500">
+              <Link href="/" className="text-[#1773b0]">Cart</Link> {">"} <span>Information</span> {">"} <span>Shipping</span> {">"} <span>Payment</span>
             </div>
+          </header>
 
-            <div className="bg-zinc-50 p-8 rounded-sm h-fit">
-              <h2 className="font-bold uppercase tracking-widest text-xs mb-8">Summary</h2>
-              <div className="space-y-6 mb-10 max-h-[400px] overflow-y-auto pr-2">
-                {cart.map((item: any) => (
-                  <div key={item.id} className="flex justify-between items-center group">
-                    <div className="flex gap-4">
-                      <div className="w-12 h-16 bg-white border flex-shrink-0">
-                        {item.image_url && <img src={item.image_url} className="w-full h-full object-cover" alt="" />}
-                      </div>
-                      <div>
-                        <p className="font-black italic uppercase text-xs">{item.name}</p>
-                        <button onClick={() => removeFromCart(item.id)} className="text-[9px] text-red-500 font-bold uppercase mt-1">Remove</button>
-                      </div>
-                    </div>
-                    <span className="font-bold text-xs italic">Rs. {item.price}</span>
-                  </div>
+          <form onSubmit={handlePlaceOrder} className="space-y-8">
+            <section>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium">Contact</h3>
+                <Link href="#" className="text-[11px] text-[#1773b0] underline">Log in</Link>
+              </div>
+              <input name="email" type="email" placeholder="Email or mobile phone number" className="w-full border border-zinc-300 rounded-md p-3 text-sm focus:ring-1 focus:ring-[#1773b0] outline-none" required />
+            </section>
+
+            <section>
+              <h3 className="text-lg font-medium mb-4">Delivery</h3>
+              <div className="space-y-3">
+                <select value={activeCountry} onChange={(e) => setActiveCountry(e.target.value as any)} className="w-full border border-zinc-300 rounded-md p-3 text-sm bg-white">
+                  {Object.entries(countryConfig).map(([code, details]) => (
+                    <option key={code} value={code}>{details.label}</option>
+                  ))}
+                </select>
+                <div className="grid grid-cols-2 gap-3">
+                  <input name="name" placeholder="First name" className="border border-zinc-300 rounded-md p-3 text-sm outline-none" required />
+                  <input placeholder="Last name" className="border border-zinc-300 rounded-md p-3 text-sm outline-none" required />
+                </div>
+                <input name="address" placeholder="Address" className="w-full border border-zinc-300 rounded-md p-3 text-sm outline-none" required />
+                <div className="grid grid-cols-3 gap-3">
+                  <select required value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)} className="border border-zinc-300 rounded-md p-3 text-sm bg-white outline-none">
+                    <option value="">City</option>
+                    {["Karachi", "Lahore", "Islamabad", "Faisalabad", "Rawalpindi", "Sahiwal", "Other Regions"].map(city => <option key={city} value={city}>{city}</option>)}
+                  </select>
+                  <input placeholder="Postal code (optional)" className="border border-zinc-300 rounded-md p-3 text-sm outline-none" />
+                </div>
+                <input name="phone" placeholder="Phone" className="w-full border border-zinc-300 rounded-md p-3 text-sm outline-none" required />
+              </div>
+            </section>
+
+            <section>
+              <h3 className="text-lg font-medium mb-4">Payment</h3>
+              <p className="text-[12px] text-zinc-500 mb-4">All transactions are secure and encrypted.</p>
+              <div className="border border-zinc-200 rounded-md overflow-hidden">
+                {['COD', 'JazzCash', 'EasyPaisa', 'Bank'].map((method) => (
+                  <label key={method} className={`flex items-center gap-3 p-4 cursor-pointer border-b border-zinc-200 last:border-0 ${paymentMethod === method ? 'bg-[#f0f5ff]' : 'bg-white'}`}>
+                    <input type="radio" checked={paymentMethod === method} onChange={() => setPaymentMethod(method)} className="w-4 h-4 accent-[#1773b0]" />
+                    <span className="text-sm font-medium">{paymentDetails[method].title}</span>
+                  </label>
                 ))}
               </div>
               
-              <div className="border-t-2 border-zinc-200 pt-6">
-                <div className="flex justify-between mb-2">
-                  <span className="text-zinc-500 uppercase text-[10px] font-bold">Subtotal</span>
-                  <span className="text-[10px] font-bold uppercase">Rs. {subtotal}</span>
+              {paymentMethod !== 'COD' && (
+                <div className="mt-4 bg-[#f9f9f9] border border-zinc-200 p-4 rounded-md text-sm">
+                  <p className="font-bold text-emerald-700 mb-2">Advance Payment Details:</p>
+                  <p>Account: {paymentDetails[paymentMethod].account}</p>
+                  <p>Name: {paymentDetails[paymentMethod].name}</p>
+                  <p className="text-[11px] mt-2 text-zinc-500 italic">Please send screenshot on WhatsApp after payment.</p>
                 </div>
-                <div className="flex justify-between mb-4">
-                  <span className="text-zinc-500 uppercase text-[10px] font-bold">TCS Shipping</span>
-                  <span className="text-[10px] font-bold uppercase">{shippingFee > 0 ? `Rs. ${shippingFee}` : 'Select City'}</span>
+              )}
+            </section>
+
+            <button type="submit" disabled={isOrdering} className="w-full bg-[#1773b0] text-white py-5 rounded-md font-bold text-sm transition-all hover:bg-[#146196]">
+              {isOrdering ? "Processing..." : "Complete order"}
+            </button>
+          </form>
+        </div>
+
+        {/* RIGHT SIDE: Summary */}
+        <div className="flex-[0.8] p-6 md:p-12 bg-[#fafafa]">
+          <div className="space-y-6">
+            {cart.map((item: any, index: number) => (
+              <div key={index} className="flex items-center justify-between gap-4 group">
+                <div className="relative">
+                  <div className="w-16 h-16 bg-white border border-zinc-200 rounded-md overflow-hidden">
+                    <img src={item.image_url} className="w-full h-full object-cover" alt="" />
+                  </div>
+                  <span className="absolute -top-2 -right-2 w-5 h-5 bg-zinc-500 text-white text-[10px] rounded-full flex items-center justify-center font-bold">{item.quantity}</span>
                 </div>
-                <div className="flex justify-between text-xl font-black italic uppercase">
-                  <span>Total</span>
-                  <span>Rs. {finalTotal}</span>
+                <div className="flex-1">
+                  <p className="text-xs font-medium">{item.name}</p>
+                  {/* REMOVE BUTTON ADDED HERE */}
+                  <button 
+                    onClick={() => removeFromCart(item.id)} 
+                    className="text-[10px] text-red-500 hover:underline mt-1 font-bold"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <p className="text-xs font-medium">{config.currency} {formatPrice(item.price)}</p>
+              </div>
+            ))}
+
+            <div className="pt-6 border-t border-zinc-200 space-y-2">
+              <div className="flex justify-between text-sm text-zinc-600">
+                <span>Subtotal</span>
+                <span>{config.currency} {formatPrice(subtotal)}</span>
+              </div>
+              <div className="flex justify-between text-sm text-zinc-600">
+                <span>Shipping</span>
+                <span>{shippingFee > 0 ? `${config.currency} ${formatPrice(shippingFee)}` : 'Enter shipping address'}</span>
+              </div>
+              {discount > 0 && (
+                <div className="flex justify-between text-sm text-emerald-600 font-medium">
+                  <span>Discount (Advance Payment)</span>
+                  <span>-{config.currency} {formatPrice(discount)}</span>
+                </div>
+              )}
+              <div className="flex justify-between pt-4 text-lg font-bold">
+                <span>Total</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-zinc-500 font-normal">{activeCountry}</span>
+                  <span>{config.currency} {formatPrice(finalTotal)}</span>
                 </div>
               </div>
-
-              <button 
-                type="submit" 
-                form="checkout-form"
-                disabled={isOrdering}
-                className="w-full bg-black text-white py-5 mt-10 font-bold text-xs tracking-[0.3em] uppercase hover:bg-zinc-800 transition-all disabled:bg-zinc-300"
-              >
-                {isOrdering ? "Processing..." : "Place Order"}
-              </button>
             </div>
           </div>
-        )}
+        </div>
+
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ interface CartItem {
   name: string;
   price: number;
   quantity: number;
+  image_url: string; // Add this to keep the checkout looking premium
 }
 
 interface CartStore {

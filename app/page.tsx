@@ -1,338 +1,212 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { useCartStore } from "@/data/cartStore";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import ProductCard from "@/components/ProductCard";
+
+const countryConfig = {
+  PK: { label: "Pakistan", currency: "Rs.", rate: 1, locale: "en-PK" },
+  US: { label: "United States", currency: "$", rate: 0.0036, locale: "en-US" },
+  GB: { label: "United Kingdom", currency: "£", rate: 0.0028, locale: "en-GB" },
+  AE: { label: "UAE", currency: "AED", rate: 0.013, locale: "ar-AE" },
+};
 
 export default function Home() {
   const [loading, setLoading] = useState(true);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [dbProducts, setDbProducts] = useState<any[]>([]);
+  const [dbOffers, setDbOffers] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
-  const { cart, addToCart, clearCart } = useCartStore();
   
-  // REVIEW FORM STATE
-  const [reviewName, setReviewName] = useState("");
-  const [reviewRating, setReviewRating] = useState(5);
-  const [reviewComment, setReviewComment] = useState("");
-  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
-  const [productReviews, setProductReviews] = useState<any[]>([]); // Added for showing reviews
-
+  const { cart, addToCart, clearCart } = useCartStore();
+  const [activeCountry, setActiveCountry] = useState<keyof typeof countryConfig>("PK");
+  const config = countryConfig[activeCountry];
   const router = useRouter();
-  const shopSectionRef = useRef<HTMLDivElement>(null);
-
-  const slides = [
-    { title: "ELEVATE YOUR", subtitle: "EVERYDAY", image: "https://your-image-url-1.jpg" },
-    { title: "THE MODERN", subtitle: "STANDARD", image: "https://your-image-url-2.jpg" },
-    { title: "DEFINING", subtitle: "THE WAY", image: "https://your-image-url-3.jpg" },
-  ];
-
-  const scrollToShop = () => {
-    shopSectionRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
 
   useEffect(() => {
-    async function getProducts() {
-      const { data } = await supabase.from('products').select('*');
-      if (data) setDbProducts(data);
-    }
-    getProducts();
-    const timer = setTimeout(() => setLoading(false), 2000);
-    const slideTimer = setInterval(() => {
-      setCurrentSlide((prev) => (prev + 1) % slides.length);
-    }, 4000);
-    return () => { clearTimeout(timer); clearInterval(slideTimer); };
-  }, [slides.length]);
+    async function fetchData() {
+      const [prodRes, catRes, offRes] = await Promise.all([
+        supabase.from('products').select('*').order('created_at', { ascending: false }),
+        supabase.from('categories').select('*').order('name', { ascending: true }),
+        supabase.from('offers').select('*').eq('is_active', true)
+      ]);
 
-  // NEW: Fetch reviews when a product is selected
+      if (prodRes.data) setDbProducts(prodRes.data);
+      if (catRes.data) setCategories(catRes.data);
+      if (offRes.data) setDbOffers(offRes.data);
+      
+      setLoading(false);
+    }
+    fetchData();
+  }, []);
+
   useEffect(() => {
-    if (selectedProduct) {
-      const fetchReviews = async () => {
-        const { data, error } = await supabase
-          .from("reviews")
-          .select("*")
-          .eq("product_id", selectedProduct.id)
-          .order("created_at", { ascending: false });
-
-        if (!error && data) {
-          setProductReviews(data);
-        }
-      };
-      fetchReviews();
-    } else {
-      setProductReviews([]);
+    if (dbOffers.length > 1) {
+      const timer = setInterval(() => {
+        setCurrentSlide((prev) => (prev + 1) % dbOffers.length);
+      }, 6000);
+      return () => clearInterval(timer);
     }
-  }, [selectedProduct]);
+  }, [dbOffers.length]);
 
-  // SUBMIT REVIEW FUNCTION
-  const submitReview = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedProduct) return;
-    
-    setIsSubmittingReview(true);
-    const { data, error } = await supabase.from("reviews").insert([
-      {
-        product_id: selectedProduct.id,
-        customer_name: reviewName,
-        rating: reviewRating,
-        comment: reviewComment,
-        is_verified: false 
-      }
-    ]).select();
-
-    if (error) {
-      alert("Error submitting review: " + error.message);
-    } else {
-      alert("Review submitted! Thank you for your feedback.");
-      // Instantly update the list so the user sees their review
-      if (data) setProductReviews([data[0], ...productReviews]);
-      setReviewName("");
-      setReviewComment("");
-      setReviewRating(5);
-    }
-    setIsSubmittingReview(false);
+  const formatPrice = (price: number) => {
+    return (price * config.rate).toLocaleString(config.locale, {
+      minimumFractionDigits: activeCountry === "PK" ? 0 : 2,
+      maximumFractionDigits: 2
+    });
   };
 
   return (
-    <main className="min-h-screen bg-white text-black overflow-x-hidden">
+    <main className="min-h-screen bg-white text-black selection:bg-black selection:text-white">
       
+      {/* 1. LOADING OVERLAY */}
       <AnimatePresence>
         {loading && (
-          <div className="fixed inset-0 z-[100] flex">
-            <motion.div initial={{ x: 0 }} exit={{ x: "-100%" }} transition={{ duration: 1, ease: [0.77, 0, 0.175, 1] }} className="h-full w-1/2 bg-black flex items-center justify-end">
-              <span className="text-white text-2xl md:text-4xl font-black italic pr-2 md:pr-6 z-[110] whitespace-nowrap">THE YASAR</span>
+          <motion.div exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black flex items-center justify-center">
+            <motion.h1 
+              initial={{ letterSpacing: "1.5em", opacity: 0 }}
+              animate={{ letterSpacing: "0.5em", opacity: 1 }}
+              className="text-white text-xs font-black uppercase italic tracking-widest"
+            >
+             THE YASAR WAY
+            </motion.h1>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 2. NAVIGATION */}
+      <nav className="flex items-center justify-between px-6 md:px-12 py-8 sticky top-0 bg-white/80 backdrop-blur-xl z-50 border-b border-gray-100">
+        <Link href="/" className="text-xl font-black tracking-tighter uppercase italic">THE YASAR WAY</Link>
+        
+        <div className="flex items-center space-x-8">
+          <div className="relative group cursor-pointer hidden md:block">
+            <span className="text-[10px] font-black uppercase tracking-widest border border-black/10 px-4 py-2 rounded-full hover:bg-black hover:text-white transition-all">
+              {activeCountry} — {config.currency}
+            </span>
+            <div className="absolute top-full right-0 mt-2 bg-white border border-gray-100 shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all flex flex-col min-w-[180px] rounded-2xl overflow-hidden">
+              {Object.entries(countryConfig).map(([code, details]) => (
+                <button key={code} onClick={() => setActiveCountry(code as any)} className="px-6 py-4 text-left hover:bg-zinc-50 text-[9px] font-black uppercase tracking-widest border-b border-gray-50 last:border-0">
+                  {details.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <Link href="/checkout" className="text-[10px] font-black tracking-widest bg-black text-white px-6 py-2 rounded-full hover:bg-emerald-500 transition-colors">
+            BAG ({cart.length})
+          </Link>
+        </div>
+      </nav>
+
+      {/* 3. DYNAMIC HERO BANNERS */}
+      <section className="relative w-full aspect-[16/9] md:h-[80vh] bg-zinc-100 overflow-hidden">
+        {dbOffers.length > 0 ? (
+          <AnimatePresence mode="wait">
+            <motion.div key={currentSlide} initial={{ opacity: 0, scale: 1.1 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} transition={{ duration: 1.5 }} className="relative w-full h-full">
+              <img src={dbOffers[currentSlide].image_url} alt="" className="w-full h-full object-cover" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex flex-col items-center justify-end pb-20 text-white p-6">
+                <motion.h2 initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }} className="text-5xl md:text-8xl font-black italic uppercase tracking-tighter text-center leading-none">
+                  {dbOffers[currentSlide].title}
+                </motion.h2>
+              </div>
             </motion.div>
-            <motion.div initial={{ x: 0 }} exit={{ x: "100%" }} transition={{ duration: 1, ease: [0.77, 0, 0.175, 1] }} className="h-full w-1/2 bg-black flex items-center justify-start">
-              <span className="text-white text-2xl md:text-4xl font-black italic pl-2 md:pl-7 z-[110] whitespace-nowrap">WAY</span>
+          </AnimatePresence>
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-zinc-300 font-black uppercase italic tracking-tighter text-4xl">Establishing Link...</div>
+        )}
+      </section>
+
+      {/* 4. DYNAMIC SECTIONS (CATEGORIES) */}
+      <section className="py-32 px-6 md:px-12 max-w-7xl mx-auto">
+        <div className="flex justify-between items-end mb-16">
+          <div className="flex flex-col">
+            <p className="text-[10px] font-black uppercase tracking-[0.4em] text-emerald-500 mb-2">Curated Series</p>
+            <h2 className="text-4xl md:text-5xl font-black uppercase italic tracking-tighter">Collections</h2>
+          </div>
+          <p className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-400 pb-2">HQ Source: {categories.length} Nodes</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+          {categories.map((cat) => (
+            <Link 
+              href={`/category/${cat.slug || cat.id}`} // FIX: Fallback to ID if slug is missing
+              key={cat.id} 
+              className="group relative aspect-[4/5] bg-zinc-100 rounded-[50px] overflow-hidden shadow-sm hover:shadow-[0_30px_60px_-15px_rgba(0,0,0,0.3)] transition-all duration-700 hover:-translate-y-4"
+            >
+              <img 
+                src={cat.image_url} 
+                className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-1000 group-hover:scale-110" 
+                alt={cat.name} 
+              />
+              <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/20 to-black/80 group-hover:via-transparent group-hover:to-black/40 transition-all duration-700" />
+              <div className="absolute inset-0 p-10 flex flex-col justify-end">
+                <div className="overflow-hidden">
+                   <h3 className="text-3xl font-black uppercase italic text-white tracking-tighter group-hover:text-emerald-400 transition-colors duration-500">
+                     {cat.name}
+                   </h3>
+                </div>
+                <div className="mt-4 translate-y-20 group-hover:translate-y-0 transition-transform duration-700 ease-[cubic-bezier(0.23,1,0.32,1)]">
+                  <span className="inline-block bg-white text-black text-[9px] font-black uppercase tracking-[0.3em] px-8 py-4 rounded-full shadow-xl group-hover:bg-emerald-500 group-hover:text-white transition-colors duration-300">
+                    View Collection
+                  </span>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      {/* 5. LATEST PRODUCTS */}
+      <section className="py-32 px-6 md:px-12 bg-zinc-50 rounded-t-[60px]">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex flex-col items-center mb-20">
+            <h2 className="text-4xl font-black uppercase italic tracking-tighter text-center">New Drops</h2>
+            <div className="h-1 w-20 bg-black mt-4" />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-12">
+            {dbProducts.map((product) => (
+              <ProductCard 
+                key={product.id}
+                product={product}
+                config={config}
+                onOpenModal={setSelectedProduct}
+              />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 6. PRODUCT MODAL */}
+      <AnimatePresence>
+        {selectedProduct && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 md:p-12">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedProduct(null)} className="absolute inset-0 bg-black/95 backdrop-blur-xl" />
+            <motion.div initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }} className="relative bg-white w-full max-w-6xl h-full md:h-[85vh] overflow-hidden flex flex-col md:flex-row rounded-[50px]">
+              <div className="w-full md:w-1/2 h-[50%] md:h-full bg-zinc-100 p-8">
+                <img src={selectedProduct.image_url} className="w-full h-full object-contain mix-blend-multiply" alt="" />
+              </div>
+              <div className="w-full md:w-1/2 h-[50%] md:h-full p-10 md:p-20 flex flex-col">
+                <button onClick={() => setSelectedProduct(null)} className="self-end mb-8 text-[10px] font-black uppercase tracking-widest opacity-30 hover:opacity-100">✕ Close</button>
+                <h2 className="text-4xl md:text-7xl font-black italic uppercase tracking-tighter leading-[0.8] mb-8">{selectedProduct.name}</h2>
+                <div className="flex items-center gap-4 mb-8">
+                  <span className="text-3xl font-bold">{config.currency} {formatPrice(selectedProduct.price)}</span>
+                  <span className="text-xs text-zinc-400 line-through">{config.currency} {formatPrice(selectedProduct.price * 1.2)}</span>
+                </div>
+                <p className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest leading-loose mb-12 flex-grow">{selectedProduct.description || "Premium build quality. Engineered for the bold. Part of the Yasar Way collection."}</p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <button onClick={() => { addToCart({ ...selectedProduct }); setSelectedProduct(null); }} className="bg-black text-white py-6 rounded-2xl font-black text-[10px] tracking-[0.3em] uppercase hover:bg-emerald-500 transition-colors">Add to Bag</button>
+                  <button onClick={() => { clearCart(); addToCart({ ...selectedProduct }); router.push("/checkout"); }} className="border-2 border-black py-6 rounded-2xl font-black text-[10px] tracking-[0.3em] uppercase hover:bg-black hover:text-white transition-all">Buy Immediately</button>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      <nav className="flex items-center justify-between px-4 md:px-8 py-6 border-b border-gray-100 sticky top-0 bg-white/80 backdrop-blur-md z-50">
-        <Link href="/" className="text-xl md:text-2xl font-black tracking-tighter uppercase italic">THE YASAR WAY</Link>
-        <div className="hidden md:flex space-x-10 text-[10px] font-bold tracking-[0.2em]">
-          <Link href="/" className="hover:text-gray-400 uppercase">Home</Link>
-          <button onClick={scrollToShop} className="hover:text-gray-400 uppercase">Shop All</button>
-        </div>
-        <Link href="/checkout">
-          <div className="text-[10px] font-bold tracking-widest border-b-2 border-black pb-1 cursor-pointer">
-            CART ({cart.length})
-          </div>
-        </Link>
-      </nav>
-
-      <section className="relative h-[70vh] md:h-[85vh] flex items-center justify-center overflow-hidden bg-black">
-        <AnimatePresence mode="wait">
-          <motion.div key={currentSlide} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 1 }} className="absolute inset-0">
-            <img src={slides[currentSlide].image} alt="Hero" className="w-full h-full object-cover opacity-60" />
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4">
-              <motion.span initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }} className="text-[8px] md:text-[10px] font-bold tracking-[0.4em] text-gray-300 uppercase mb-4">
-                Premium Grooming Essentials
-              </motion.span>
-              <motion.h1 initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.7 }} className="text-4xl md:text-[100px] font-black uppercase italic leading-[0.9] tracking-tighter text-white">
-                {slides[currentSlide].title} <br /> 
-                <span className="text-gray-400">{slides[currentSlide].subtitle}</span>
-              </motion.h1>
-              <motion.button initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.9 }} onClick={scrollToShop} className="mt-8 md:mt-10 border-2 border-white text-white px-8 md:px-12 py-3 md:py-4 text-[10px] font-bold tracking-[0.3em] hover:bg-white hover:text-black transition-all">
-                SHOP COLLECTION
-              </motion.button>
-            </div>
-          </motion.div>
-        </AnimatePresence>
-      </section>
-
-      <section ref={shopSectionRef} className="py-12 md:py-20 px-4 md:px-8 max-w-7xl mx-auto scroll-mt-20">
-        <h2 className="text-xl md:text-2xl font-black uppercase italic tracking-tighter mb-8 md:mb-12 text-center text-black">New Drops</h2>
-        
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-8">
-          {dbProducts.map((product) => (
-            <div key={product.id} className="group cursor-pointer" onClick={() => setSelectedProduct(product)}>
-              <div className="aspect-[4/5] bg-gray-50 flex flex-col items-center justify-center border border-gray-100 relative overflow-hidden transition-all hover:shadow-lg text-black">
-                {product.image_url ? (
-                  <img src={product.image_url} alt={product.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
-                ) : (
-                  <span className="text-gray-200 text-xs font-bold uppercase italic">{product.name}</span>
-                )}
-                
-                {product.tag && (
-                  <span className="absolute top-2 left-2 bg-black text-white text-[8px] font-bold px-2 py-1 uppercase tracking-widest">
-                    {product.tag}
-                  </span>
-                )}
-
-                <button 
-                  onClick={(e) => { e.stopPropagation(); addToCart(product); }}
-                  className="hidden md:block absolute bottom-0 w-full bg-black text-white py-4 text-[10px] font-bold tracking-widest translate-y-full group-hover:translate-y-0 transition-transform"
-                >
-                  ADD TO CART
-                </button>
-              </div>
-              <div className="mt-3 md:mt-4 text-center px-1 text-black">
-                <div className="flex items-center justify-center gap-2 mb-1">
-                  <span className="text-emerald-600 font-bold text-[7px] md:text-[8px] uppercase tracking-tighter">
-                    {product.sales_count || 0} SOLD
-                  </span>
-                  <span className="text-zinc-300 text-[8px]">|</span>
-                  <span className="text-black font-bold text-[8px] md:text-[9px]">
-                    ★ 5.0
-                  </span>
-                </div>
-
-                <h3 className="font-bold text-[10px] md:text-xs uppercase tracking-widest truncate">{product.name}</h3>
-                <div className="flex flex-col md:flex-row items-center justify-center gap-1">
-                  <span className="text-black font-bold text-[10px] md:text-xs">Rs. {product.price}</span>
-                  {product.oldPrice && (
-                    <span className="text-gray-400 line-through text-[8px] md:text-[10px]">Rs. {product.oldPrice}</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-<AnimatePresence>
-  {selectedProduct && (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedProduct(null)} className="absolute inset-0 bg-black/90 backdrop-blur-sm" />
-      <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-white w-full max-w-4xl max-h-[90vh] overflow-y-auto flex flex-col md:flex-row">
-        <button onClick={() => setSelectedProduct(null)} className="absolute top-4 right-4 z-[210] text-black p-2 font-bold uppercase text-[10px] tracking-widest bg-white/80">Close [X]</button>
-        
-        <div className="w-full md:w-1/2 bg-gray-100">
-          <img src={selectedProduct.image_url} alt={selectedProduct.name} className="w-full h-full object-cover" />
-        </div>
-        
-        <div className="w-full md:w-1/2 p-8 md:p-12 flex flex-col justify-start bg-white text-black">
-          <div className="flex items-center justify-between mb-4">
-            <span className="text-[10px] font-bold tracking-[0.3em] text-gray-400 uppercase">Original Premium</span>
-            <span className="bg-emerald-50 text-emerald-600 px-3 py-1 text-[9px] font-black uppercase italic tracking-tighter">
-              {selectedProduct.sales_count || 0} Pieces Sold
-            </span>
-          </div>
-
-          <h2 className="text-3xl md:text-5xl font-black italic uppercase tracking-tighter mb-4 text-black block leading-none">
-            {selectedProduct?.name}
-          </h2>
-          
-          <div className="flex items-center gap-1 mb-6">
-            {[...Array(5)].map((_, i) => (
-              <span key={i} className="text-black text-xs">★</span>
-            ))}
-            <span className="text-[10px] font-bold ml-2 uppercase tracking-widest text-black">(Verified Reviews)</span>
-          </div>
-
-          <div className="flex items-center gap-4 mb-8">
-            <span className="text-2xl font-black text-black">Rs. {selectedProduct.price}</span>
-            {selectedProduct.oldPrice && <span className="text-gray-400 line-through">Rs. {selectedProduct.oldPrice}</span>}
-          </div>
-
-          <p className="text-gray-600 text-[10px] md:text-xs uppercase tracking-[0.15em] leading-loose mb-10">
-            {selectedProduct.description || "Engineered for the modern man. This essential grooming piece from THE YASAR WAY collection delivers premium performance and unmatched style."}
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-12">
-            <button 
-              onClick={() => {
-                clearCart();
-                addToCart(selectedProduct);
-                router.push("/checkout");
-              }}
-              className="w-full bg-white text-black border-2 border-black py-5 font-bold text-[9px] md:text-[10px] tracking-[0.2em] uppercase hover:bg-zinc-100 transition-all order-2 md:order-1"
-            >
-              Buy It Now
-            </button>
-
-            <button 
-              onClick={() => { addToCart(selectedProduct); setSelectedProduct(null); }}
-              className="w-full bg-black text-white py-5 font-bold text-[9px] md:text-[10px] tracking-[0.2em] uppercase hover:bg-zinc-800 transition-all order-1 md:order-2"
-            >
-              Add To Cart
-            </button>
-          </div>
-
-          {/* VIEW REVIEWS SECTION */}
-          <div className="border-t border-gray-100 pt-10 mb-10">
-            <h3 className="text-xs font-black uppercase italic tracking-[0.2em] mb-6 text-black">Customer Reviews ({productReviews.length})</h3>
-            <div className="space-y-6 max-h-60 overflow-y-auto pr-2">
-              {productReviews.length > 0 ? (
-                productReviews.map((review) => (
-                  <div key={review.id} className="border-b border-gray-50 pb-4 last:border-0">
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-black">{review.customer_name}</span>
-                      <div className="flex">
-                        {[...Array(5)].map((_, i) => (
-                          <span key={i} className={`text-[8px] ${i < review.rating ? 'text-black' : 'text-gray-200'}`}>★</span>
-                        ))}
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-gray-500 italic">"{review.comment}"</p>
-                  </div>
-                ))
-              ) : (
-                <p className="text-[10px] text-gray-400 uppercase text-center italic">No reviews yet. Be the first!</p>
-              )}
-            </div>
-          </div>
-
-          <div className="border-t border-gray-100 pt-10">
-            <h3 className="text-xs font-black uppercase italic tracking-[0.2em] mb-6 text-black">Leave Your Feedback</h3>
-            <form onSubmit={submitReview} className="space-y-4">
-              <div>
-                <label className="text-[9px] font-bold uppercase tracking-widest text-gray-400 block mb-2">Your Name</label>
-                <input 
-                  type="text" 
-                  value={reviewName} 
-                  onChange={(e) => setReviewName(e.target.value)} 
-                  className="w-full bg-gray-50 border border-gray-200 p-3 text-[10px] outline-none focus:border-black transition-all text-black"
-                  placeholder="NAME"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="text-[9px] font-bold uppercase tracking-widest text-gray-400 block mb-2">Rating</label>
-                <div className="flex gap-2">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button 
-                      key={star} 
-                      type="button" 
-                      onClick={() => setReviewRating(star)} 
-                      className={`text-lg ${reviewRating >= star ? 'text-black' : 'text-gray-200'}`}
-                    >
-                      ★
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[9px] font-bold uppercase tracking-widest text-gray-400 block mb-2">Comment</label>
-                <textarea 
-                  value={reviewComment} 
-                  onChange={(e) => setReviewComment(e.target.value)} 
-                  className="w-full bg-gray-50 border border-gray-200 p-3 text-[10px] outline-none focus:border-black transition-all h-24 resize-none text-black"
-                  placeholder="YOUR EXPERIENCE..."
-                  required
-                />
-              </div>
-
-              <button 
-                type="submit" 
-                disabled={isSubmittingReview}
-                className="w-full bg-black text-white py-4 font-bold text-[9px] tracking-[0.3em] uppercase hover:bg-zinc-800 transition-all disabled:opacity-50"
-              >
-                {isSubmittingReview ? 'Submitting...' : 'Post Review'}
-              </button>
-            </form>
-          </div>
-        </div>
-      </motion.div>
-    </div>
-  )}
-</AnimatePresence>
     </main>
   );
 }
