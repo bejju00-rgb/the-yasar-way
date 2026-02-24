@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import emailjs from "@emailjs/browser"; // RESTORED
+import emailjs from "@emailjs/browser"; 
 
 export default function AdminPanel() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -12,6 +12,10 @@ export default function AdminPanel() {
   const [offers, setOffers] = useState<any[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [tempImageUrl, setTempImageUrl] = useState("");
+
+  // Edit Tracking States
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editType, setEditType] = useState<"product" | "category" | "offer" | null>(null);
 
   // Form States
   const [prodName, setProdName] = useState("");
@@ -40,13 +44,33 @@ export default function AdminPanel() {
     if (isAuthenticated) fetchData();
   }, [isAuthenticated]);
 
-  // FULL EMAILJS LOGIC RESTORED
+  const startEditProduct = (p: any) => {
+    setEditingId(p.id); setEditType("product");
+    setProdName(p.name || ""); setProdPrice(p.price || ""); setProdOldPrice(p.old_price || "");
+    setProdDesc(p.description || ""); setProdStockCount(p.stock_count || 0);
+    setCategoryId(p.category_id || ""); setTempImageUrl(p.image_url || "");
+  };
+
+  const startEditCategory = (c: any) => {
+    setEditingId(c.id); setEditType("category");
+    setCatName(c.name || ""); setCatSlug(c.slug || ""); setTempImageUrl(c.image_url || "");
+  };
+
+  const startEditOffer = (o: any) => {
+    setEditingId(o.id); setEditType("offer");
+    setOfferTitle(o.title || ""); setTempImageUrl(o.image_url || "");
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null); setEditType(null);
+    setProdName(""); setProdPrice(""); setProdOldPrice(""); setProdDesc(""); setProdStockCount(0);
+    setCatName(""); setCatSlug(""); setOfferTitle(""); setTempImageUrl("");
+  };
+
   const updateOrderStatus = async (order: any) => {
     if (!order || !order.id) return;
     let nextStatus = order.status === "Pending" ? "Shipped" : order.status === "Shipped" ? "Delivered" : "Delivered";
-    
     const { error: updateError } = await supabase.from("orders").update({ status: nextStatus }).eq("id", order.id);
-    
     if (!updateError) {
       if (order.customer_email && order.customer_email.includes('@')) {
         const templateParams = {
@@ -56,18 +80,9 @@ export default function AdminPanel() {
           status: nextStatus,
           total_price: `${order.currency || 'Rs.'} ${order.total_price}`,
         };
-        
         try {
-          await emailjs.send(
-            "service_uqpm74w", 
-            nextStatus === "Shipped" ? "template_7x017r7" : "template_pbyba6g",
-            templateParams,
-            "31ajJuFK8ia03HKZD"
-          );
-          console.log("Email Dispatched successfully.");
-        } catch (err) { 
-          console.error("EmailJS Error:", err); 
-        }
+          await emailjs.send("service_uqpm74w", nextStatus === "Shipped" ? "template_7x017r7" : "template_pbyba6g", templateParams, "31ajJuFK8ia03HKZD");
+        } catch (err) { console.error("EmailJS Error:", err); }
       }
       fetchData();
     }
@@ -114,92 +129,154 @@ export default function AdminPanel() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          {/* COL 1: CATS & BANNERS */}
           <div className="space-y-8">
             <section className="bg-zinc-900/40 p-6 border border-zinc-800/50 rounded-[35px]">
-              <h3 className="text-[10px] font-black uppercase text-emerald-500 mb-4 tracking-widest">Collections</h3>
+              <h3 className="text-[10px] font-black uppercase text-emerald-500 mb-4 tracking-widest">
+                {editingId && editType === "category" ? "Editing Collection" : "Collections"}
+              </h3>
               <form onSubmit={async (e) => {
                 e.preventDefault();
-                await supabase.from("categories").insert([{ name: catName, slug: catSlug.toLowerCase(), image_url: tempImageUrl }]);
-                setCatName(""); setCatSlug(""); setTempImageUrl(""); fetchData();
+                const payload = { name: catName, slug: catSlug.toLowerCase(), image_url: tempImageUrl };
+                const { error } = editingId && editType === "category" 
+                  ? await supabase.from("categories").update(payload).eq("id", editingId)
+                  : await supabase.from("categories").insert([payload]);
+                if (error) alert(error.message);
+                cancelEdit(); fetchData();
               }} className="space-y-3 mb-6">
-                <input placeholder="Name" value={catName} onChange={(e) => setCatName(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 rounded-lg text-xs" required />
-                <input placeholder="Slug" value={catSlug} onChange={(e) => setCatSlug(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 rounded-lg text-xs" required />
+                <input placeholder="Name" value={catName ?? ""} onChange={(e) => setCatName(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 rounded-lg text-xs" required />
+                <input placeholder="Slug" value={catSlug ?? ""} onChange={(e) => setCatSlug(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 rounded-lg text-xs" required />
                 <input type="file" onChange={handleFileUpload} className="text-[8px]" />
-                <button className="w-full bg-white text-black font-black py-3 rounded-lg text-[9px] uppercase">Add Collection</button>
-              </form>
-              <div className="space-y-2 max-h-40 overflow-y-auto">
-                {categories.map(c => (
-                  <div key={c.id} className="flex justify-between items-center bg-black/40 p-3 rounded-xl border border-zinc-800/50">
-                    <span className="text-[9px] font-black uppercase italic">{c.name}</span>
-                    <button onClick={() => deleteItem('categories', c.id)} className="text-red-500">&times;</button>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section className="bg-zinc-900/40 p-6 border border-zinc-800/50 rounded-[35px]">
-              <h3 className="text-[10px] font-black uppercase text-orange-500 mb-4 tracking-widest">Banners</h3>
-              <form onSubmit={async (e) => {
-                e.preventDefault();
-                await supabase.from("offers").insert([{ title: offerTitle, image_url: tempImageUrl, is_active: true }]);
-                setOfferTitle(""); setTempImageUrl(""); fetchData();
-              }} className="space-y-3 mb-6">
-                <input placeholder="Title" value={offerTitle} onChange={(e) => setOfferTitle(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 rounded-lg text-xs" required />
-                <input type="file" onChange={handleFileUpload} className="text-[8px]" />
-                <button className="w-full bg-orange-500 text-black font-black py-3 rounded-lg text-[9px] uppercase">Deploy</button>
-              </form>
-              <div className="grid grid-cols-1 gap-2 max-h-40 overflow-y-auto">
-                {offers.map(o => (
-                  <div key={o.id} className="relative aspect-[21/9] rounded-xl overflow-hidden border border-zinc-800">
-                    <img src={o.image_url} className="w-full h-full object-cover opacity-60" />
-                    <button onClick={() => deleteItem('offers', o.id)} className="absolute top-1 right-1 bg-red-500 text-[8px] p-1 rounded-full">&times;</button>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
-
-          {/* COL 2: PRODUCTS */}
-          <div className="space-y-8">
-            <section className="bg-zinc-900/40 p-6 border border-zinc-800/50 rounded-[35px]">
-              <h3 className="text-[10px] font-black uppercase text-white mb-4 tracking-widest">Product Deployment</h3>
-              <form onSubmit={async (e) => {
-                e.preventDefault();
-                await supabase.from("products").insert([{ 
-                  name: prodName, price: Number(prodPrice), old_price: prodOldPrice ? Number(prodOldPrice) : null,
-                  description: prodDesc, stock_count: prodStockCount, is_in_stock: prodStockCount > 0,
-                  image_url: tempImageUrl, category_id: categoryId ? Number(categoryId) : null 
-                }]);
-                setProdName(""); setProdPrice(""); setProdOldPrice(""); setProdDesc(""); setProdStockCount(0); setTempImageUrl(""); fetchData();
-              }} className="space-y-4 mb-6">
-                <input placeholder="Name" value={prodName} onChange={(e) => setProdName(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 rounded-lg text-xs" required />
-                <div className="grid grid-cols-2 gap-2">
-                  <input placeholder="Price" type="number" value={prodPrice} onChange={(e) => setProdPrice(e.target.value)} className="bg-black border border-zinc-800 p-3 rounded-lg text-xs" required />
-                  <input placeholder="Qty" type="number" value={prodStockCount} onChange={(e) => setProdStockCount(Number(e.target.value))} className="bg-black border border-zinc-800 p-3 rounded-lg text-xs" required />
+                <div className="flex gap-2">
+                  <button className="flex-1 bg-white text-black font-black py-3 rounded-lg text-[9px] uppercase">
+                    {editingId && editType === "category" ? "Update" : "Add Collection"}
+                  </button>
+                  {editingId && editType === "category" && <button type="button" onClick={cancelEdit} className="bg-zinc-800 px-4 rounded-lg text-[9px]">X</button>}
                 </div>
-                <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 rounded-lg text-[9px] uppercase">
-                  <option value="">Category</option>
-                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-                <input type="file" onChange={handleFileUpload} className="text-[8px]" />
-                <button disabled={isUploading} className="w-full bg-emerald-500 text-black font-black py-4 rounded-xl text-[10px] uppercase">Add product</button>
               </form>
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
-                {products.map(p => (
-                  <div key={p.id} className="bg-black/40 border border-zinc-800 p-3 rounded-xl flex justify-between items-center group">
-                    <div className="flex items-center gap-3">
-                        <img src={p.image_url} className="w-8 h-8 rounded object-cover grayscale group-hover:grayscale-0" />
-                        <span className="text-[9px] font-black uppercase italic leading-none">{p.name}</span>
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {categories.map(c => (
+                  <div key={c.id} className="flex flex-col bg-black/40 p-3 rounded-xl border border-zinc-800/50 overflow-hidden">
+                    {c.image_url && <img src={c.image_url} alt="" className="w-full h-auto max-h-32 object-contain rounded mb-2 grayscale hover:grayscale-0 transition-all" />}
+                    <div className="flex justify-between items-center">
+                      <span className="text-[9px] font-black uppercase italic">{c.name}</span>
+                      <div className="flex gap-3">
+                        <button onClick={() => startEditCategory(c)} className="text-emerald-500 text-[8px] font-bold uppercase">Edit</button>
+                        <button onClick={() => deleteItem('categories', c.id)} className="text-red-500 text-sm">&times;</button>
+                      </div>
                     </div>
-                    <button onClick={() => deleteItem('products', p.id)} className="text-[8px] font-black text-red-500">Remove</button>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="bg-zinc-900/40 p-6 border border-zinc-800/50 rounded-[35px]">
+              <h3 className="text-[10px] font-black uppercase text-orange-500 mb-4 tracking-widest">
+                {editingId && editType === "offer" ? "Editing Banner" : "Banners"}
+              </h3>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const payload = { title: offerTitle, image_url: tempImageUrl, is_active: true };
+                const { error } = editingId && editType === "offer"
+                  ? await supabase.from("offers").update(payload).eq("id", editingId)
+                  : await supabase.from("offers").insert([payload]);
+                if (error) alert(error.message);
+                cancelEdit(); fetchData();
+              }} className="space-y-3 mb-6">
+                <input placeholder="Title" value={offerTitle ?? ""} onChange={(e) => setOfferTitle(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 rounded-lg text-xs" required />
+                <input type="file" onChange={handleFileUpload} className="text-[8px]" />
+                <div className="flex gap-2">
+                  <button className="flex-1 bg-orange-500 text-black font-black py-3 rounded-lg text-[9px] uppercase">
+                    {editingId && editType === "offer" ? "Update" : "Deploy Banner"}
+                  </button>
+                  {editingId && editType === "offer" && <button type="button" onClick={cancelEdit} className="bg-zinc-800 px-4 rounded-lg text-[9px]">X</button>}
+                </div>
+              </form>
+              <div className="grid grid-cols-1 gap-4 max-h-[500px] overflow-y-auto">
+                {offers.map(o => (
+                  <div key={o.id} className="relative w-full rounded-xl overflow-hidden border border-zinc-800 group bg-black/40">
+                    <img src={o.image_url} className="w-full h-auto object-contain opacity-80" />
+                    <div className="absolute inset-0 flex items-center justify-center gap-4 opacity-0 group-hover:opacity-100 bg-black/60 transition-opacity">
+                      <button onClick={() => startEditOffer(o)} className="bg-white text-black text-[8px] px-3 py-1 rounded font-black">EDIT</button>
+                      <button onClick={() => deleteItem('offers', o.id)} className="bg-red-500 text-white text-[8px] px-3 py-1 rounded font-black">DELETE</button>
+                    </div>
+                    <div className="p-2 text-center bg-black/20 border-t border-zinc-800">
+                        <p className="text-[8px] font-black uppercase tracking-widest italic">{o.title}</p>
+                    </div>
                   </div>
                 ))}
               </div>
             </section>
           </div>
 
-          {/* COL 3: ORDERS & EMAIL TRIGGER */}
+          <div className="space-y-8">
+            <section className="bg-zinc-900/40 p-6 border border-zinc-800/50 rounded-[35px]">
+              <h3 className="text-[10px] font-black uppercase text-white mb-4 tracking-widest">
+                {editingId && editType === "product" ? "Editing Product" : "Product Deployment"}
+              </h3>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const payload = { 
+                  name: prodName, price: Number(prodPrice), old_price: prodOldPrice ? Number(prodOldPrice) : null,
+                  description: prodDesc, stock_count: Number(prodStockCount), is_in_stock: Number(prodStockCount) > 0,
+                  image_url: tempImageUrl, category_id: categoryId ? Number(categoryId) : null 
+                };
+                const { error } = editingId && editType === "product"
+                  ? await supabase.from("products").update(payload).eq("id", editingId)
+                  : await supabase.from("products").insert([payload]);
+                
+                if (error) alert(error.message);
+                else { cancelEdit(); fetchData(); alert("SUCCESS"); }
+              }} className="space-y-4 mb-6">
+                <input placeholder="Product Name" value={prodName ?? ""} onChange={(e) => setProdName(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 rounded-lg text-xs" required />
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[8px] text-zinc-500 uppercase ml-1">Current Price</label>
+                    <input placeholder="Price" type="number" value={prodPrice ?? ""} onChange={(e) => setProdPrice(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 rounded-lg text-xs" required />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[8px] text-zinc-500 uppercase ml-1">Old Price (Optional)</label>
+                    <input placeholder="Old Price" type="number" value={prodOldPrice ?? ""} onChange={(e) => setProdOldPrice(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 rounded-lg text-xs" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <input placeholder="Stock Qty" type="number" value={prodStockCount ?? 0} onChange={(e) => setProdStockCount(Number(e.target.value))} className="bg-black border border-zinc-800 p-3 rounded-lg text-xs" required />
+                  <select value={categoryId ?? ""} onChange={(e) => setCategoryId(e.target.value)} className="bg-black border border-zinc-800 p-3 rounded-lg text-[9px] uppercase">
+                    <option value="">Category</option>
+                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <textarea placeholder="Description" value={prodDesc ?? ""} onChange={(e) => setProdDesc(e.target.value)} className="w-full bg-black border border-zinc-800 p-3 rounded-lg text-xs h-20" />
+                <div className="space-y-1">
+                   <input type="file" onChange={handleFileUpload} className="text-[8px]" />
+                   {isUploading && <p className="text-[8px] text-emerald-500 animate-pulse uppercase">Uploading Image...</p>}
+                </div>
+                <div className="flex gap-2">
+                  <button disabled={isUploading} className="flex-1 bg-emerald-500 text-black font-black py-4 rounded-xl text-[10px] uppercase">
+                    {editingId && editType === "product" ? "Update Product" : "Add product"}
+                  </button>
+                  {editingId && editType === "product" && <button type="button" onClick={cancelEdit} className="bg-zinc-800 px-6 rounded-xl text-[10px] uppercase font-black">Cancel</button>}
+                </div>
+              </form>
+              <div className="space-y-3 max-h-80 overflow-y-auto pr-2">
+                {products.map(p => (
+                  <div key={p.id} className="bg-black/40 border border-zinc-800 p-4 rounded-xl flex flex-col gap-3 group">
+                    <div className="flex gap-4">
+                        <img src={p.image_url} className="w-16 h-auto max-h-16 rounded object-contain bg-black/50" />
+                        <div className="flex flex-col justify-center">
+                            <span className="text-[10px] font-black uppercase italic leading-none">{p.name}</span>
+                            <span className="text-[8px] text-zinc-500 mt-1">Stock: {p.stock_count}</span>
+                        </div>
+                    </div>
+                    <div className="flex justify-end gap-3 pt-2 border-t border-zinc-900">
+                      <button onClick={() => startEditProduct(p)} className="text-[8px] font-black text-emerald-500 uppercase">Edit Product</button>
+                      <button onClick={() => deleteItem('products', p.id)} className="text-[8px] font-black text-red-500 uppercase">Delete</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+
           <div className="space-y-6">
              <h3 className="text-zinc-600 font-black uppercase tracking-[0.5em] text-[10px] pl-4">Orders</h3>
              <div className="space-y-4 max-h-[80vh] overflow-y-auto pr-2">
@@ -210,20 +287,18 @@ export default function AdminPanel() {
                         <span className="block font-black text-white uppercase italic text-sm">{order.customer_name}</span>
                         <span className="text-[8px] text-zinc-500 uppercase">{order.customer_phone}</span>
                       </div>
-                      {/* EMAIL TRIGGER ON STATUS CHANGE */}
                       <button onClick={() => updateOrderStatus(order)} className={`text-[8px] font-black px-4 py-2 rounded-full border transition-all ${order.status === 'Delivered' ? 'bg-emerald-500 text-black border-emerald-500' : 'text-zinc-400 border-zinc-700'}`}>
                         {order.status || 'Pending'}
                       </button>
                     </div>
                     <div className="flex justify-between items-center border-t border-zinc-800 pt-4">
                       <span className="font-black text-emerald-400 text-sm italic">Rs. {order.total_price}</span>
-                      <button onClick={() => deleteItem('orders', order.id)} className="text-[8px] font-black text-zinc-700 hover:text-red-500">Archive</button>
+                      <button onClick={() => deleteItem('orders', order.id)} className="text-[8px] font-black text-zinc-700 hover:text-red-500 uppercase">Archive</button>
                     </div>
                  </div>
                ))}
              </div>
           </div>
-
         </div>
       </div>
     </div>

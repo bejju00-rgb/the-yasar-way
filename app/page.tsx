@@ -72,7 +72,7 @@ export default function Home() {
               animate={{ letterSpacing: "0.5em", opacity: 1 }}
               className="text-white text-xs font-black uppercase italic tracking-widest"
             >
-             THE YASAR WAY
+              INITIALIZING THE YASAR WAY
             </motion.h1>
           </motion.div>
         )}
@@ -132,13 +132,14 @@ export default function Home() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
           {categories.map((cat) => (
             <Link 
-              href={`/category/${cat.slug || cat.id}`} // FIX: Fallback to ID if slug is missing
+              href={`/category/${cat.slug || cat.id}`} 
               key={cat.id} 
               className="group relative aspect-[4/5] bg-zinc-100 rounded-[50px] overflow-hidden shadow-sm hover:shadow-[0_30px_60px_-15px_rgba(0,0,0,0.3)] transition-all duration-700 hover:-translate-y-4"
             >
+              {/* REMOVED GRAYSCALE CLASSES HERE */}
               <img 
                 src={cat.image_url} 
-                className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-1000 group-hover:scale-110" 
+                className="w-full h-full object-cover transition-all duration-1000 group-hover:scale-110" 
                 alt={cat.name} 
               />
               <div className="absolute inset-0 bg-gradient-to-b from-transparent via-black/20 to-black/80 group-hover:via-transparent group-hover:to-black/40 transition-all duration-700" />
